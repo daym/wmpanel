@@ -59,6 +59,7 @@ atom_manager! {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::ffi::OsStrExt;
     let (conn, screen_num) = x11rb::connect(None).unwrap();
     let atoms = AtomCollection::new(&conn)?.reply()?;
 
@@ -97,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // TODO: XSelectInput(display,main_window,event_mask);
     // TODO: XSelectInput(display,icon_window,event_mask);
 
-    let title = "Simple Window"; // TODO: arg0
+    let title = std::env::args_os().next().unwrap();
 
     {
         use x11rb::wrapper::ConnectionExt; // change_property8
