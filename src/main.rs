@@ -303,7 +303,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // TODO: generate random startup id (hostname+pid+current time) and set funny environment variable "DESKTOP_STARTUP_ID" for the child.
                 use std::os::unix::process::CommandExt;
-                use std::time::{SystemTime, UNIX_EPOCH};
                 let hostname = hostname::get().unwrap();
                 let time = x.time;
                 unsafe {
