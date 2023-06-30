@@ -1,0 +1,18 @@
+[package]
+name = "wmpanel-rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hostname = "0.3.1"
+image = "0.24.6"
+# TODO: features: cursor damage dpms image once_libloading cell randr render res resource_manager screensaver shape! shm sync! tracing xevie xinerama xfixes xf86vidmode xf86dri xinput xkb xprint xselinux xtest xv xvmc
+x11rb = { version = "0.12.0", features = ["image"] }
+
+# TODO: features: icccm, ewmh
+#xcb-wm = "0.4.0"
+
+xdg = "2.5.0"
+#xcb = "1.2.1"
