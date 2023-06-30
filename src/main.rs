@@ -2,7 +2,6 @@ use x11rb::atom_manager;
 use x11rb::connection::Connection;
 //use x11rb::errors::ReplyOrIdError;
 use std::borrow::Cow;
-use std::os;
 use std::process::Command;
 use x11rb::properties::WmHints;
 use x11rb::properties::WmHintsState;
@@ -156,12 +155,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gc_id = conn.generate_id().unwrap();
     let gc_aux = CreateGCAux::new().foreground(screen.white_pixel);
     conn.create_gc(gc_id, root, &gc_aux).unwrap();
-    let rect = Rectangle {
-        x: 0,
-        y: 0,
-        width: width,
-        height: height,
-    };
     let change = ChangeGCAux::default()
         .foreground(Some(0))
         .fill_style(Some(FillStyle::SOLID)); // TODO: font, subwindow_mode, fill_rule, fill_style
