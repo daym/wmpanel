@@ -299,8 +299,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             );
                             use exec::execvp;
                             let err = execvp("env", &["env", desktop_startup_id.as_str(), "gedit", "hello"]);
-                            //Err(err.into())
-                            panic!("WTF")
+                            Err(match err {
+                                exec::Error::BadArgument(e) => {
+                                    panic!("bad argument")
+                                }
+                                exec::Error::Errno(e) => {
+                                    std::io::Error::from(e)
+                                }
+
+                            })
                         })
                         .spawn();
                 }
