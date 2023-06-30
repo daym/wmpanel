@@ -280,28 +280,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Event: {:?}", event);
         match event {
             Event::ButtonRelease(x) => {
-                // TODO: set DESKTOP_STARTUP_ID
-                /*
-                  ID
-
-                          uniquely identifies a startup sequence; should be some globally
-                          unique string (for example, hostname+pid+current time).
-
-                -> putenv DESKTOP_STARTUP_ID
-
-                  NAME
-                  SCREEN
-                  [BIN]
-                  [ICON]
-                  [DESKTOP]
-                  [TIMESTAMP]
-                  [DESCRIPTION]
-                  [WMCLASS]
-                  [SILENT]
-
-                */
-
-                // TODO: generate random startup id (hostname+pid+current time) and set funny environment variable "DESKTOP_STARTUP_ID" for the child.
                 use std::os::unix::process::CommandExt;
                 let hostname = hostname::get().unwrap();
                 let time = x.time;
@@ -326,10 +304,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         })
                         .spawn();
                 }
-                //error.
-                // TODO: on launchee startup failure, we treat the launch sequence as ended and we send the "end" message ourselves.
+                // TODO: on launchee startup failure, we should treat the launch sequence as ended and we send the "end" message ourselves.
                 //child.wait();
-                // detach child
+                // detach from child
             }
             _ => {}
         }
