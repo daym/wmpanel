@@ -2,6 +2,7 @@ use x11rb::atom_manager;
 use x11rb::connection::Connection;
 //use x11rb::errors::ReplyOrIdError;
 use std::borrow::Cow;
+use std::os;
 use std::process::Command;
 use x11rb::properties::WmHints;
 use x11rb::properties::WmHintsState;
@@ -101,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     {
         use x11rb::wrapper::ConnectionExt; // change_property8
-                                           //use x11rb::protocol::xproto::ConnectionExt;
+        //use x11rb::protocol::xproto::ConnectionExt;
 
         // TODO set WM_COMMAND to argc, argv ?
 
@@ -177,26 +178,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap()
         .decode()
         .unwrap(); // into_rgba8()
-                   // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
+    // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
 
-/*
-let image: &dyn GenericImageView<Pixel=Rgb<u8>> = &buffer;
-fn view(&self, x: u32, y: u32, width: u32, height: u32) -> SubImage<&Self>
+    /*
+    let image: &dyn GenericImageView<Pixel=Rgb<u8>> = &buffer;
+    fn view(&self, x: u32, y: u32, width: u32, height: u32) -> SubImage<&Self>
 
-Function image::imageops::resize
+    Function image::imageops::resize
 
-pub fn resize<I: GenericImageView>(
-    image: &I,
-    nwidth: u32,
-    nheight: u32,
-    filter: FilterType (Gaussian)
-) -> ImageBuffer<I::Pixel, Vec<<I::Pixel as Pixel>::Subpixel>>
-where
-    I::Pixel: 'static,
-    <I::Pixel as Pixel>::Subpixel: 'static,
+    pub fn resize<I: GenericImageView>(
+        image: &I,
+        nwidth: u32,
+        nheight: u32,
+        filter: FilterType (Gaussian)
+    ) -> ImageBuffer<I::Pixel, Vec<<I::Pixel as Pixel>::Subpixel>>
+    where
+        I::Pixel: 'static,
+        <I::Pixel as Pixel>::Subpixel: 'static,
 
 
-*/
+    */
 
     let image_width = u16::try_from(img.width()).unwrap();
     let image_height = u16::try_from(img.height()).unwrap();
@@ -210,7 +211,7 @@ where
         x11rb::image::ImageOrder::MsbFirst,
         Cow::Borrowed(&image_data),
     )
-    .unwrap();
+        .unwrap();
 
     /*
     pub fn convert(
@@ -302,25 +303,30 @@ where
 
                 // TODO: generate random startup id (hostname+pid+current time) and set funny environment variable "DESKTOP_STARTUP_ID" for the child.
                 use std::os::unix::process::CommandExt;
-                let error = Command::new("gedit")
-                    .arg("hello")
-                    .before_exec(|| {
-                        use std::time::{SystemTime, UNIX_EPOCH};
-                        let time_since_the_epoch = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .expect("Time went backwards");
-                        let hostname = hostname::get().unwrap();
-                        let desktop_startup_id = format!(
-                            "{:?}+{}+{}",
-                            hostname,
-                            "pidFIXME",
-                            time_since_the_epoch.as_secs()
-                        );
-                        // hangs here or something...
-                        //std::env::set_var("DESKTOP_STARTUP_ID", desktop_startup_id);
-                        Ok(())
-                    })
-                    .spawn();
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let hostname = hostname::get().unwrap();
+                let time = x.time;
+                unsafe {
+                    let error = Command::new("gedit")
+                        .arg("hello")
+                        .pre_exec(move || {
+                            use arrform::{arrform, ArrForm};
+                            let pid = std::process::id();
+                            // See <https://cgit.freedesktop.org/startup-notification/tree/doc/startup-notification.txt>
+                            let desktop_startup_id = arrform!(
+                                280,
+                                "DESKTOP_STARTUP_ID={:?}+{}+_TIME{}",
+                                hostname,
+                                pid,
+                                time
+                            );
+                            use exec::execvp;
+                            let err = execvp("env", &["env", desktop_startup_id.as_str(), "gedit", "hello"]);
+                            //Err(err.into())
+                            panic!("WTF")
+                        })
+                        .spawn();
+                }
                 //error.
                 // TODO: on launchee startup failure, we treat the launch sequence as ended and we send the "end" message ourselves.
                 //child.wait();
