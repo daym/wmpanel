@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     {
         use x11rb::wrapper::ConnectionExt; // change_property8
-        //use x11rb::protocol::xproto::ConnectionExt;
+                                           //use x11rb::protocol::xproto::ConnectionExt;
 
         // TODO set WM_COMMAND to argc, argv ?
 
@@ -145,14 +145,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // WindowMaker used to be weird...
     // However, nowadays, we can just set WM_CLASS to include "DockApp" and not bother with the other stuff.
-/*
-    use x11rb::x11_utils::Serialize;
-    let mut hints = hints.serialize();
-    // Replace the above WmHintsState::Iconic with Withdrawn.
-    // This is a Window-Maker-specific non-standard protocol extension not explicitly supported by x11rb.
-    hints[(2*4)..(3*4)].copy_from_slice(&0u32.to_ne_bytes());
-    conn.change_property(PropMode::REPLACE, mainwin_id, AtomEnum::WM_HINTS, AtomEnum::WM_HINTS, 32, 9, &hints);
-*/
+    /*
+        use x11rb::x11_utils::Serialize;
+        let mut hints = hints.serialize();
+        // Replace the above WmHintsState::Iconic with Withdrawn.
+        // This is a Window-Maker-specific non-standard protocol extension not explicitly supported by x11rb.
+        hints[(2*4)..(3*4)].copy_from_slice(&0u32.to_ne_bytes());
+        conn.change_property(PropMode::REPLACE, mainwin_id, AtomEnum::WM_HINTS, AtomEnum::WM_HINTS, 32, 9, &hints);
+    */
 
     // Fluxbox:
     //    if (winclient->initial_state == WithdrawnState ||
@@ -183,7 +183,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap()
         .decode()
         .unwrap(); // into_rgba8()
-    // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
+                   // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
 
     /*
     let image: &dyn GenericImageView<Pixel=Rgb<u8>> = &buffer;
@@ -216,7 +216,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         x11rb::image::ImageOrder::MsbFirst,
         Cow::Borrowed(&image_data),
     )
-        .unwrap();
+    .unwrap();
 
     /*
     pub fn convert(
@@ -287,34 +287,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Event::ButtonRelease(x) => {
                 use std::os::unix::process::CommandExt;
                 let hostname = hostname::get().unwrap();
-                let time = x.time;
-                unsafe {
-                    let error = Command::new("gedit")
-                        .arg("hello")
-                        .pre_exec(move || {
-                            use arrform::{arrform, ArrForm};
-                            let pid = std::process::id();
-                            // See <https://cgit.freedesktop.org/startup-notification/tree/doc/startup-notification.txt>
-                            let desktop_startup_id = arrform!(
-                                280,
-                                "DESKTOP_STARTUP_ID={:?}+{}+_TIME{}",
-                                hostname,
-                                pid,
-                                time
-                            );
-                            use exec::execvp;
-                            let err = execvp("env", &["env", desktop_startup_id.as_str(), "gedit", "hello"]);
-                            Err(match err {
-                                exec::Error::BadArgument(e) => {
-                                    panic!("bad argument")
-                                }
-                                exec::Error::Errno(e) => {
-                                    std::io::Error::from(e)
-                                }
-
+                let state: KeyButMask = x.state;
+                if state.contains(KeyButMask::BUTTON1) {
+                    let time = x.time;
+                    unsafe {
+                        let error = Command::new("gedit")
+                            .arg("hello")
+                            .pre_exec(move || {
+                                use arrform::{arrform, ArrForm};
+                                let pid = std::process::id();
+                                // See <https://cgit.freedesktop.org/startup-notification/tree/doc/startup-notification.txt>
+                                let desktop_startup_id = arrform!(
+                                    280,
+                                    "DESKTOP_STARTUP_ID={:?}+{}+_TIME{}",
+                                    hostname,
+                                    pid,
+                                    time
+                                );
+                                use exec::execvp;
+                                let err = execvp(
+                                    "env",
+                                    &["env", desktop_startup_id.as_str(), "gedit", "hello"],
+                                );
+                                Err(match err {
+                                    exec::Error::BadArgument(e) => {
+                                        panic!("bad argument")
+                                    }
+                                    exec::Error::Errno(e) => std::io::Error::from(e),
+                                })
                             })
-                        })
-                        .spawn();
+                            .spawn();
+                    }
                 }
                 // TODO: on launchee startup failure, we should treat the launch sequence as ended and we send the "end" message ourselves.
                 //child.wait();
