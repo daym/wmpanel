@@ -138,10 +138,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut hints = WmHints::new();
-    hints.initial_state = None;
+    hints.initial_state = Some(WmHintsState::Iconic);
     hints.icon_window = Some(iconwin_id);
     hints.icon_position = Some((0, 0));
     hints.window_group = Some(mainwin_id);
+
+    // WindowMaker used to be weird...
+    // However, nowadays, we can just set WM_CLASS to include "DockApp" and not bother with the other stuff.
+/*
+    use x11rb::x11_utils::Serialize;
+    let mut hints = hints.serialize();
+    // Replace the above WmHintsState::Iconic with Withdrawn.
+    // This is a Window-Maker-specific non-standard protocol extension not explicitly supported by x11rb.
+    hints[(2*4)..(3*4)].copy_from_slice(&0u32.to_ne_bytes());
+    conn.change_property(PropMode::REPLACE, mainwin_id, AtomEnum::WM_HINTS, AtomEnum::WM_HINTS, 32, 9, &hints);
+*/
 
     // Fluxbox:
     //    if (winclient->initial_state == WithdrawnState ||
