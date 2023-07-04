@@ -138,7 +138,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut hints = WmHints::new();
-    hints.initial_state = Some(WmHintsState::Iconic); // MISSING WithdrawnState
+    hints.initial_state = None;
     hints.icon_window = Some(iconwin_id);
     hints.icon_position = Some((0, 0));
     hints.window_group = Some(mainwin_id);
