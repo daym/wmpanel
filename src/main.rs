@@ -287,8 +287,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Event::ButtonRelease(x) => {
                 use std::os::unix::process::CommandExt;
                 let hostname = hostname::get().unwrap();
-                let state: KeyButMask = x.state;
-                if state.contains(KeyButMask::BUTTON1) {
+                if x.detail == 1 { // x.state.contains(KeyButMask::BUTTON1) {
                     let time = x.time;
                     unsafe {
                         let error = Command::new("gedit")
