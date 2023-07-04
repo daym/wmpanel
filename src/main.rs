@@ -185,6 +185,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap(); // into_rgba8()
                    // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
 
+    use image::imageops;
+    use image::imageops::FilterType;
+    let img = img.resize(width.into(), height.into(), FilterType::Gaussian);
+
     /*
     let image: &dyn GenericImageView<Pixel=Rgb<u8>> = &buffer;
     fn view(&self, x: u32, y: u32, width: u32, height: u32) -> SubImage<&Self>
