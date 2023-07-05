@@ -58,6 +58,67 @@ atom_manager! {
     }
 }
 
+fn load_scale_image(target_width: u16, target_height: u16) -> image::DynamicImage {
+    let img = image::io::Reader::open("idea.png")
+        .unwrap()
+        .decode()
+        .unwrap(); // into_rgba8()
+                   // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
+
+    use image::imageops;
+    use image::imageops::FilterType;
+    // TODO: Keep aspect ratio somehow
+    let img = img.resize(target_width.into(), target_height.into(), FilterType::Gaussian);
+
+    /*
+    let image: &dyn GenericImageView<Pixel=Rgb<u8>> = &buffer;
+    fn view(&self, x: u32, y: u32, width: u32, height: u32) -> SubImage<&Self>
+
+    Function image::imageops::resize
+
+    pub fn resize<I: GenericImageView>(
+        image: &I,
+        nwidth: u32,
+        nheight: u32,
+        filter: FilterType (Gaussian)
+    ) -> ImageBuffer<I::Pixel, Vec<<I::Pixel as Pixel>::Subpixel>>
+    where
+        I::Pixel: 'static,
+        <I::Pixel as Pixel>::Subpixel: 'static,
+
+
+    */
+    img
+}
+
+fn new_x_image(img: image::DynamicImage) -> x11rb::image::Image<'static> {
+    let image_width = u16::try_from(img.width()).unwrap();
+    let image_height = u16::try_from(img.height()).unwrap();
+    let image_data = img.into_rgba8();
+    let image = x11rb::image::Image::new(
+        image_width,
+        image_height,
+        x11rb::image::ScanlinePad::Pad8,
+        24, /* depth */
+        x11rb::image::BitsPerPixel::B32,
+        x11rb::image::ImageOrder::MsbFirst,
+        Cow::Owned(image_data.into_raw()),
+    )
+    .unwrap();
+
+    /*
+    pub fn convert(
+        &self,
+        scanline_pad: ScanlinePad,
+        bits_per_pixel: BitsPerPixel,
+        byte_order: ImageOrder
+    ) -> Cow<'_, Self>
+    */
+
+    // TODO: scale or something. Maybe right after loading it from the file, tho?
+    image
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::ffi::OsStrExt;
     let (conn, screen_num) = x11rb::connect(None).unwrap();
@@ -179,59 +240,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     //use std::io::Cursor;
     // TODO: scale
-    let img = image::io::Reader::open("idea.png")
-        .unwrap()
-        .decode()
-        .unwrap(); // into_rgba8()
-                   // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
-
-    use image::imageops;
-    use image::imageops::FilterType;
-    let img = img.resize(width.into(), height.into(), FilterType::Gaussian);
-
-    /*
-    let image: &dyn GenericImageView<Pixel=Rgb<u8>> = &buffer;
-    fn view(&self, x: u32, y: u32, width: u32, height: u32) -> SubImage<&Self>
-
-    Function image::imageops::resize
-
-    pub fn resize<I: GenericImageView>(
-        image: &I,
-        nwidth: u32,
-        nheight: u32,
-        filter: FilterType (Gaussian)
-    ) -> ImageBuffer<I::Pixel, Vec<<I::Pixel as Pixel>::Subpixel>>
-    where
-        I::Pixel: 'static,
-        <I::Pixel as Pixel>::Subpixel: 'static,
-
-
-    */
-
-    let image_width = u16::try_from(img.width()).unwrap();
-    let image_height = u16::try_from(img.height()).unwrap();
-    let image_data = img.into_rgba8();
-    let image = x11rb::image::Image::new(
-        image_width,
-        image_height,
-        x11rb::image::ScanlinePad::Pad8,
-        24, /* depth */
-        x11rb::image::BitsPerPixel::B32,
-        x11rb::image::ImageOrder::MsbFirst,
-        Cow::Borrowed(&image_data),
-    )
-    .unwrap();
-
-    /*
-    pub fn convert(
-        &self,
-        scanline_pad: ScanlinePad,
-        bits_per_pixel: BitsPerPixel,
-        byte_order: ImageOrder
-    ) -> Cow<'_, Self>
-    */
-
-    // TODO: scale or something. Maybe right after loading it from the file, tho?
+    let img = load_scale_image(width, height);
+    let image = new_x_image(img);
     image.put(&conn, pixmap_id, gc_id, 0, 0).unwrap(); // FIXME: if shm, use shm!
 
     let change = ChangeWindowAttributesAux::default()
