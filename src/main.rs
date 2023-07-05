@@ -577,7 +577,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .pre_exec(move || {
                                 use arrform::{arrform, ArrForm};
                                 if let Some(working_directory) = &working_directory {
-                                    std::env::set_current_dir(working_directory);
+                                    std::env::set_current_dir(working_directory); // TODO: is that safe?
                                 }
                                 let err = if startup_notify.is_some() && startup_notify.unwrap() {
                                     let pid = std::process::id();
