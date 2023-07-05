@@ -414,7 +414,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // FIXME check
                 }*/
                 // TODO: try_exec
-                let terminal = desktop_entry.terminal;
+                let terminal = desktop_entry.terminal; // See xdg-settings get *
+                // gsettings get org.gnome.desktop.default-applications.terminal exec
+                // gsettings get org.gnome.desktop.default-applications.terminal exec-arg
+                // exo-open  --launch TerminalEmulator
+                // i3-sensible-terminal
+
+                // also, ~/.local/share/applications/mimeapps.list ; [Default Applications] text/html=firefox.desktop
                 let startup_notify = desktop_entry.startup_notify;
                 let startup_wm_class = desktop_entry.startup_wm_class;
 
