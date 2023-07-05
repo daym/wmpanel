@@ -8,6 +8,7 @@ use x11rb::properties::WmHintsState;
 use x11rb::protocol::xproto::*;
 use x11rb::protocol::Event;
 use x11rb::COPY_DEPTH_FROM_PARENT;
+use x11rb::rust_connection::RustConnection;
 
 /* TODO:
 
@@ -119,15 +120,9 @@ fn new_x_image(img: image::DynamicImage) -> x11rb::image::Image<'static> {
     image
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn create_window(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, width: u16, height: u16) -> Result<(u32, u32), Box<dyn std::error::Error>> {
     use std::os::unix::ffi::OsStrExt;
-    let (conn, screen_num) = x11rb::connect(None).unwrap();
-    let atoms = AtomCollection::new(&conn)?.reply()?;
-
-    let screen = &conn.setup().roots[screen_num];
     let mainwin_id = conn.generate_id()?;
-    let width: u16 = 64;
-    let height: u16 = 64;
     conn.create_window(
         COPY_DEPTH_FROM_PARENT,
         mainwin_id,
@@ -219,7 +214,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //    if (winclient->initial_state == WithdrawnState ||
     //        winclient->getWMClassClass() == "DockApp") {
 
-    hints.set(&conn, mainwin_id)?; // TODO .reply_unchecked()? or something
+    hints.set(conn, mainwin_id)?; // TODO .reply_unchecked()? or something
+    Ok((mainwin_id, iconwin_id))
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (conn, screen_num) = x11rb::connect(None).unwrap();
+    let atoms = AtomCollection::new(&conn)?.reply()?;
+    let screen = &conn.setup().roots[screen_num];
+    let width: u16 = 64;
+    let height: u16 = 64;
+    let (mainwin_id, iconwin_id) = create_window(&atoms, &conn, &screen, width, height)?;
     let depth = screen.root_depth;
     let root = screen.root;
     let pixmap_id = conn.generate_id().unwrap();
