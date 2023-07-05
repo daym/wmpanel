@@ -400,6 +400,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if path.extension().unwrap() == "desktop" {
                 let desktop_entry = DesktopEntry::read(fs::read_to_string(&path).unwrap());
                 let name = desktop_entry.name;
+                if let Some(only_show_in) = desktop_entry.only_show_in {
+                    if only_show_in.len() > 0 {
+                        continue;
+                    }
+                }
+                /*if let Some(not_show_in) = desktop_entry.not_show_in {
+                    let not_show_in = not_show_in.split(";").collect::<Vec<&str>>().filter(|x| x != "").collect::<Vec<&str>>();
+                    // FIXME check
+                }*/
+                // TODO: try_exec
+                let terminal = desktop_entry.terminal;
+                let startup_notify = desktop_entry.startup_notify;
+                let startup_wm_class = desktop_entry.startup_wm_class;
+
                 let icon = match desktop_entry.icon {
                     None => None,
                     Some(icon_name) => {
@@ -414,9 +428,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         result
                     },
                 };
-                // TODO: name opt str, comment opt str, only_show_in none, not_show_in none, try_exec none, terminal opt bool, startup_notify opt bool, startup_wm_class opt str
-                // if only_show_in is some continue
-                // not_show_in dunno
                 match desktop_entry.exec {
                     None => {
                     }
