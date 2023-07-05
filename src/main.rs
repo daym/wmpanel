@@ -245,7 +245,13 @@ fonts
     Fills the destination rectangle with the background pixel from gc, then paints the text with the foreground pixel from gc. The upper-left corner of the filled rectangle is at [x, y - font-ascent]. The width is overall-width, the height is font-ascent + font-descent. The overall-width, font-ascent and font-descent are as returned by xcb_query_text_extents (TODO).
 */
 
-fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &str, width: u16, height: u16) -> Result<(u32), Box<dyn std::error::Error>> {
+struct Launcher {
+    icon_window_id: Window,
+    args: Vec<String>,
+    // TODO: startup notification flag etc
+}
+
+fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &str, width: u16, height: u16) -> Result<Launcher, Box<dyn std::error::Error>> {
     let image = new_x_image(load_scale_image(icon_name, width, height));
 
     let pixmap_id = conn.generate_id().unwrap();
@@ -279,7 +285,10 @@ fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Scree
 
     conn.map_window(mainwin_id)?;
     conn.map_window(iconwin_id)?;
-    Ok((iconwin_id))
+    Ok(Launcher {
+        icon_window_id: iconwin_id,
+        args: vec!["1".to_string(), "2".to_string()],
+    })
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -302,8 +311,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //conn.copy_area(pixmap, root, gc, 0, 0, 0, 0, 400, 400).unwrap();
     //conn.flush().unwrap();
 
-    let launcher_window_0 = create_launcher(&atoms, &conn, &screen, gc_id, root, "idea.png", width, height).unwrap();
-    let launcher_window_1 = create_launcher(&atoms, &conn, &screen, gc_id, root, "printer.png", width, height).unwrap();
+    let mut launchers = Vec::<Launcher>::new();
+    launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "idea.png", width, height).unwrap());
+    launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "printer.png", width, height).unwrap());
+    let launchers = &launchers;
 
     conn.flush();
     loop {
@@ -316,14 +327,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if x.detail == 1 { // x.state.contains(KeyButMask::BUTTON1) {
                     let time = x.time;
                     let window_id = x.event;
-                    if window_id == launcher_window_0 {
-                        println!("launcher window 0");
-                    } else if window_id == launcher_window_1 {
-                        println!("launcher window 1");
-                    }
+                    let launcher = launchers.iter().find(|&launcher| launcher.icon_window_id == window_id).unwrap();
+                    let args = launcher.args.clone();
                     unsafe {
-                        let error = Command::new("gedit")
-                            .arg("hello")
+                        let error = Command::new("env")
                             .pre_exec(move || {
                                 use arrform::{arrform, ArrForm};
                                 let pid = std::process::id();
@@ -336,9 +343,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     time
                                 );
                                 use exec::execvp;
+                                let mut new_args = vec!["env".to_string(), desktop_startup_id.as_str().to_string()];
+                                new_args.extend_from_slice(&args[..]);
+                                let args = new_args;
                                 let err = execvp(
                                     "env",
-                                    &["env", desktop_startup_id.as_str(), "gedit", "hello"],
+                                    &args,
                                 );
                                 Err(match err {
                                     exec::Error::BadArgument(e) => {
