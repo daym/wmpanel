@@ -251,7 +251,7 @@ struct Launcher {
     // TODO: startup notification flag etc
 }
 
-fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &str, width: u16, height: u16) -> Result<Launcher, Box<dyn std::error::Error>> {
+fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &str, width: u16, height: u16, args: Vec<String>) -> Result<Launcher, Box<dyn std::error::Error>> {
     let image = new_x_image(load_scale_image(icon_name, width, height));
 
     let pixmap_id = conn.generate_id().unwrap();
@@ -287,7 +287,7 @@ fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Scree
     conn.map_window(iconwin_id)?;
     Ok(Launcher {
         icon_window_id: iconwin_id,
-        args: vec!["1".to_string(), "2".to_string()],
+        args,
     })
 }
 
@@ -312,8 +312,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //conn.flush().unwrap();
 
     let mut launchers = Vec::<Launcher>::new();
-    launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "idea.png", width, height).unwrap());
-    launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "printer.png", width, height).unwrap());
+    launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "idea.png", width, height, vec!["idea".to_string()]).unwrap());
+    launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "printer.png", width, height, vec!["gedit".to_string(), "hello".to_string()]).unwrap());
     let launchers = &launchers;
 
     conn.flush();
