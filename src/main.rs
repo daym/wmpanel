@@ -284,6 +284,7 @@ struct Launcher {
     startup_notify: Option<bool>,
     startup_wm_class: Option<String>,
     // TODO: startup notification flag etc
+    working_directory: Option<OsString>,
 }
 
 fn create_launcher(
@@ -298,6 +299,7 @@ fn create_launcher(
     args: Vec<OsString>,
     startup_notify: Option<bool>,
     startup_wm_class: Option<String>,
+    working_directory: Option<OsString>,
 ) -> Result<Launcher, Box<dyn std::error::Error>> {
     let image = new_x_image(load_scale_image(icon_name, width, height)?)?;
     // TODO: image::imageops: blur, brighten, invert
@@ -339,6 +341,7 @@ fn create_launcher(
         args: args, // .iter().map(|x| x.to_string()).collect::<Vec<String>>(),
         startup_notify,
         startup_wm_class,
+        working_directory,
     })
 }
 
@@ -463,6 +466,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // also, ~/.local/share/applications/mimeapps.list ; [Default Applications] text/html=firefox.desktop
                 let startup_notify = desktop_entry.startup_notify;
                 let startup_wm_class = desktop_entry.startup_wm_class;
+                let working_directory = desktop_entry.path.map(|x| OsString::from(x));
 
                 let icon = match desktop_entry.icon {
                     None => None,
@@ -534,6 +538,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             args,
                             startup_notify,
                             startup_wm_class,
+                            working_directory,
                         );
                         match launcher {
                             Ok(launcher) => launchers.push(launcher),
@@ -566,10 +571,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .unwrap();
                     let args = launcher.args.clone();
                     let startup_notify = launcher.startup_notify;
+                    let working_directory = launcher.working_directory.clone();
                     unsafe {
                         let error = Command::new("env")
                             .pre_exec(move || {
                                 use arrform::{arrform, ArrForm};
+                                if let Some(working_directory) = &working_directory {
+                                    std::env::set_current_dir(working_directory);
+                                }
                                 let err = if startup_notify.is_some() && startup_notify.unwrap() {
                                     let pid = std::process::id();
                                     // See <https://cgit.freedesktop.org/startup-notification/tree/doc/startup-notification.txt>
