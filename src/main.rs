@@ -92,20 +92,22 @@ fn load_scale_image(name: &Path, target_width: u16, target_height: u16) -> Resul
     Ok(img)
 }
 
-fn new_x_image(img: image::DynamicImage) -> x11rb::image::Image<'static> {
-    let image_width = u16::try_from(img.width()).unwrap();
-    let image_height = u16::try_from(img.height()).unwrap();
+fn new_x_image(img: image::DynamicImage) -> Result<x11rb::image::Image<'static>, Box<dyn std::error::Error>> {
+    let image_width = u16::try_from(img.width())?;
+    let image_height = u16::try_from(img.height())?;
     let image_data = img.into_rgba8();
+    use image::Rgba;
+    //use image::ImageBuffer;
+    //let s: ImageBuffer<Rgba<u8>, Vec<u8>> = image_data;
     let image = x11rb::image::Image::new(
         image_width,
         image_height,
         x11rb::image::ScanlinePad::Pad8,
         24, /* depth */
         x11rb::image::BitsPerPixel::B32,
-        x11rb::image::ImageOrder::MsbFirst,
+        x11rb::image::ImageOrder::LsbFirst,
         Cow::Owned(image_data.into_raw()),
-    )
-    .unwrap();
+    )?;
 
     /*
     pub fn convert(
@@ -117,7 +119,7 @@ fn new_x_image(img: image::DynamicImage) -> x11rb::image::Image<'static> {
     */
 
     // TODO: scale or something. Maybe right after loading it from the file, tho?
-    image
+    Ok(image)
 }
 
 fn create_window(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, width: u16, height: u16) -> Result<(u32, u32), Box<dyn std::error::Error>> {
@@ -252,7 +254,7 @@ struct Launcher {
 }
 
 fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &Path, width: u16, height: u16, args: Vec<&str>) -> Result<Launcher, Box<dyn std::error::Error>> {
-    let image = new_x_image(load_scale_image(icon_name, width, height)?);
+    let image = new_x_image(load_scale_image(icon_name, width, height)?)?;
 
     let pixmap_id = conn.generate_id().unwrap();
     let depth = screen.root_depth;
