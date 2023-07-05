@@ -489,6 +489,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 .arg(desktop_startup_id.as_str().to_string())
                                 .args(&args)
                                 .exec();
+                                // TODO: on launchee startup failure, we should treat the launch sequence as ended and we send the "end" message ourselves.
                                 Err(match err {
                                     exec::Error::BadArgument(e) => {
                                         panic!("bad argument")
@@ -499,9 +500,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .spawn();
                     }
                 }
-                // TODO: on launchee startup failure, we should treat the launch sequence as ended and we send the "end" message ourselves.
-                //child.wait();
-                // detach from child
             }
             _ => {}
         }
