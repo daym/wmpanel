@@ -1,3 +1,4 @@
+// TODO: DBusActivatable
 use x11rb::atom_manager;
 use x11rb::connection::Connection;
 //use x11rb::errors::ReplyOrIdError;
@@ -433,6 +434,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if path.extension().unwrap() == "desktop" {
                 let desktop_entry = DesktopEntry::read(fs::read_to_string(&path).unwrap());
+                if let Some(hidden) = desktop_entry.hidden {
+                    if hidden {
+                        continue
+                    }
+                }
+                if let Some(no_display) = desktop_entry.no_display {
+                    if no_display {
+                        continue
+                    }
+                }
                 let name = desktop_entry.name;
                 if let Some(only_show_in) = desktop_entry.only_show_in {
                     if only_show_in.len() > 0 {
