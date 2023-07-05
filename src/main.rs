@@ -218,6 +218,33 @@ fn create_window(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen,
     Ok((mainwin_id, iconwin_id))
 }
 
+/*
+fonts
+
+    let fonts = x11rb::protocol::xproto::list_fonts(&conn, 10000, b"-misc-fixed-*")
+        .unwrap()
+        .reply_unchecked()
+        .unwrap()
+        .unwrap();
+    let fonts = fonts
+        .names
+        .into_iter()
+        .map(|strstr| std::str::from_utf8(&strstr.name).unwrap().to_string())
+        .collect::<Vec<_>>();
+        for font in fonts {
+        println!("font {font}");
+    }
+           pub fn image_text8<'c, 'input, Conn>(
+        conn: &'c Conn,
+        drawable: Drawable,
+        gc: Gcontext,
+        x: i16,
+        y: i16,
+        string: &'input [u8]
+    ) -> Result<VoidCookie<'c, Conn>, ConnectionError>
+    Fills the destination rectangle with the background pixel from gc, then paints the text with the foreground pixel from gc. The upper-left corner of the filled rectangle is at [x, y - font-ascent]. The width is overall-width, the height is font-ascent + font-descent. The overall-width, font-ascent and font-descent are as returned by xcb_query_text_extents (TODO).
+*/
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (conn, screen_num) = x11rb::connect(None).unwrap();
     let atoms = AtomCollection::new(&conn)?.reply()?;
@@ -268,32 +295,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let change = ChangeWindowAttributesAux::default().background_pixmap(Some(pixmap_id));
     let res = conn.change_window_attributes(mainwin_id, &change)?.check();
-
-    let fonts = x11rb::protocol::xproto::list_fonts(&conn, 10000, b"-misc-fixed-*")
-        .unwrap()
-        .reply_unchecked()
-        .unwrap()
-        .unwrap();
-    let fonts = fonts
-        .names
-        .into_iter()
-        .map(|strstr| std::str::from_utf8(&strstr.name).unwrap().to_string())
-        .collect::<Vec<_>>();
-    /*    for font in fonts {
-        println!("font {font}");
-    }*/
-    /*
-        pub fn image_text8<'c, 'input, Conn>(
-        conn: &'c Conn,
-        drawable: Drawable,
-        gc: Gcontext,
-        x: i16,
-        y: i16,
-        string: &'input [u8]
-    ) -> Result<VoidCookie<'c, Conn>, ConnectionError>
-    Fills the destination rectangle with the background pixel from gc, then paints the text with the foreground pixel from gc. The upper-left corner of the filled rectangle is at [x, y - font-ascent]. The width is overall-width, the height is font-ascent + font-descent. The overall-width, font-ascent and font-descent are as returned by xcb_query_text_extents (TODO).
-
-    */
 
     conn.map_window(mainwin_id)?;
     conn.map_window(iconwin_id)?;
