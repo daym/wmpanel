@@ -1,4 +1,7 @@
 // TODO: DBusActivatable
+// TODO: Actions
+// TODO: URL (if entry is Link type)
+// TODO: SingleMainWindow
 use x11rb::atom_manager;
 use x11rb::connection::Connection;
 //use x11rb::errors::ReplyOrIdError;
