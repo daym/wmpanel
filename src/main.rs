@@ -1,8 +1,11 @@
 use x11rb::atom_manager;
 use x11rb::connection::Connection;
 //use x11rb::errors::ReplyOrIdError;
+use std::path::Path;
 use std::borrow::Cow;
 use std::process::Command;
+use std::collections::HashSet;
+use std::fs;
 use x11rb::properties::WmHints;
 use x11rb::properties::WmHintsState;
 use x11rb::protocol::xproto::*;
@@ -59,11 +62,8 @@ atom_manager! {
     }
 }
 
-fn load_scale_image(name: &str, target_width: u16, target_height: u16) -> image::DynamicImage {
-    let img = image::io::Reader::open(name)
-        .unwrap()
-        .decode()
-        .unwrap(); // into_rgba8()
+fn load_scale_image(name: &Path, target_width: u16, target_height: u16) -> Result<image::DynamicImage, Box<dyn std::error::Error>> {
+    let img = image::io::Reader::open(name)?.decode()?;
                    // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
 
     use image::imageops;
@@ -89,7 +89,7 @@ fn load_scale_image(name: &str, target_width: u16, target_height: u16) -> image:
 
 
     */
-    img
+    Ok(img)
 }
 
 fn new_x_image(img: image::DynamicImage) -> x11rb::image::Image<'static> {
@@ -251,8 +251,8 @@ struct Launcher {
     // TODO: startup notification flag etc
 }
 
-fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &str, width: u16, height: u16, args: Vec<String>) -> Result<Launcher, Box<dyn std::error::Error>> {
-    let image = new_x_image(load_scale_image(icon_name, width, height));
+fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &Path, width: u16, height: u16, args: Vec<&str>) -> Result<Launcher, Box<dyn std::error::Error>> {
+    let image = new_x_image(load_scale_image(icon_name, width, height)?);
 
     let pixmap_id = conn.generate_id().unwrap();
     let depth = screen.root_depth;
@@ -287,11 +287,36 @@ fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Scree
     conn.map_window(iconwin_id)?;
     Ok(Launcher {
         icon_window_id: iconwin_id,
-        args,
+        args: args.iter().map(|x| x.to_string()).collect::<Vec<String>>(),
     })
 }
 
+/*
+let xdg_dirs = xdg::BaseDirectories::with_prefix("myapp").unwrap();
+
+let logo_path = xdg_dirs
+    .find_data_file("logo.png")
+    .expect("application data not present");
+let mut logo_file = File::open(logo_path)?;
+let mut logo = Vec::new();
+logo_file.read_to_end(&mut logo)?;
+pub fn find_data_files<P: AsRef<Path>>(&self, path: P) -> FileFindIterator ⓘ
+
+
+*/
+
+use std::fs::read_to_string;
+
+fn read_lines(filename: &str) -> Vec<String> {
+    read_to_string(filename)
+        .unwrap()  // panic on possible file-reading errors
+        .lines()  // split the string into an iterator of string slices
+        .map(String::from)  // make each slice into a string
+        .collect()  // gather them together into a vector
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let hidden_desktop_files = read_lines("/home/dannym/.fluxbox/guihidden");
     let (conn, screen_num) = x11rb::connect(None).unwrap();
     let atoms = AtomCollection::new(&conn)?.reply()?;
     let screen = &conn.setup().roots[screen_num];
@@ -310,10 +335,91 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // TODO: conn.poly_fill_rectangle(pixmap_id, gc_id, &[rect]).unwrap();
     //conn.copy_area(pixmap, root, gc, 0, 0, 0, 0, 400, 400).unwrap();
     //conn.flush().unwrap();
-
     let mut launchers = Vec::<Launcher>::new();
-    launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "idea.png", width, height, vec!["idea".to_string()]).unwrap());
-    launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "printer.png", width, height, vec!["gedit".to_string(), "hello".to_string()]).unwrap());
+
+/* crate "xdg"
+    let xdg_dirs = xdg::BaseDirectories::new().unwrap();
+    let applicationss = xdg_dirs.find_data_files("applications");
+    for applications in applicationss {
+        for entry in fs::read_dir(applications).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.extension().unwrap() == "desktop" {
+                println!("{:?}", entry);
+            }
+        }
+    }
+
+    modules:
+    basedir
+    categories
+    icon_finder
+    
+*/
+
+    use xdgkit::desktop_entry::DesktopEntry;
+    use xdgkit::basedir::{applications};
+    let desktop_directories = applications().unwrap();
+    let desktop_directories = desktop_directories.split(":").collect::<Vec<&str>>();
+    let mut seen_desktop_directories = HashSet::<String>::new();
+    for desktop_directory in desktop_directories {
+        if desktop_directory == "" { // bug in xdgkit
+            continue
+        }
+        if seen_desktop_directories.contains(desktop_directory) {
+            continue
+        }
+        seen_desktop_directories.insert(desktop_directory.to_string());
+        //println!("DESKTOP DIR {:?}", desktop_directory);
+        for entry in fs::read_dir(desktop_directory).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if let Some(file_name) = path.file_name() {
+                let file_name = file_name.to_str().unwrap().to_string();
+                if hidden_desktop_files.contains(&file_name) {
+                    continue
+                }
+            }
+            if path.extension().unwrap() == "desktop" {
+                let desktop_entry = DesktopEntry::read(fs::read_to_string(path).unwrap());
+                let icon = match desktop_entry.icon {
+                    None => None,
+                    Some(icon_name) => {
+                        //println!("icon_name {}", icon_name);
+                        xdgkit::icon_finder::find_icon(icon_name.to_string(), 64, 1)
+                    },
+                };
+                // TODO: name, comment, icon, only_show_in, not_show_in, try_exec, terminal, startup_notify, startup_wm_class
+                match desktop_entry.exec {
+                    None => {
+                    }
+                    Some(ref command_line) => {
+                        let args = command_line.split(" ").collect::<Vec<&str>>();
+                        let icon_path = match icon {
+                            Some(x) => {
+                                if x == Path::new("").to_path_buf() { // XXX
+                                    Path::new("printer.png").to_path_buf()
+                                } else {
+                                    x
+                                }
+                            },
+                            None => Path::new("printer.png").to_path_buf(),
+                        };
+                        //println!("ICON PATH {:?}", icon_path);
+                        let launcher = create_launcher(&atoms, &conn, &screen, gc_id, root, &icon_path, width, height, args);
+                        match launcher {
+                            Ok(launcher) => launchers.push(launcher),
+                            Err(x) => {
+                                eprintln!("{:?}", x);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        //launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "idea.png", width, height, vec!["idea".to_string()]).unwrap());
+        //launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "printer.png", width, height, vec!["gedit".to_string(), "hello".to_string()]).unwrap());
+    }
     let launchers = &launchers;
 
     conn.flush();
