@@ -245,7 +245,7 @@ fonts
     Fills the destination rectangle with the background pixel from gc, then paints the text with the foreground pixel from gc. The upper-left corner of the filled rectangle is at [x, y - font-ascent]. The width is overall-width, the height is font-ascent + font-descent. The overall-width, font-ascent and font-descent are as returned by xcb_query_text_extents (TODO).
 */
 
-fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &str, width: u16, height: u16) -> Result<(), Box<dyn std::error::Error>> {
+fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &str, width: u16, height: u16) -> Result<(u32), Box<dyn std::error::Error>> {
     let image = new_x_image(load_scale_image(icon_name, width, height));
 
     let pixmap_id = conn.generate_id().unwrap();
@@ -279,7 +279,7 @@ fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Scree
 
     conn.map_window(mainwin_id)?;
     conn.map_window(iconwin_id)?;
-    Ok(())
+    Ok((iconwin_id))
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -302,8 +302,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //conn.copy_area(pixmap, root, gc, 0, 0, 0, 0, 400, 400).unwrap();
     //conn.flush().unwrap();
 
-    create_launcher(&atoms, &conn, &screen, gc_id, root, "idea.png", width, height).unwrap();
-    create_launcher(&atoms, &conn, &screen, gc_id, root, "printer.png", width, height).unwrap();
+    let launcher_window_0 = create_launcher(&atoms, &conn, &screen, gc_id, root, "idea.png", width, height).unwrap();
+    let launcher_window_1 = create_launcher(&atoms, &conn, &screen, gc_id, root, "printer.png", width, height).unwrap();
 
     conn.flush();
     loop {
@@ -315,6 +315,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let hostname = hostname::get().unwrap();
                 if x.detail == 1 { // x.state.contains(KeyButMask::BUTTON1) {
                     let time = x.time;
+                    let window_id = x.event;
+                    if window_id == launcher_window_0 {
+                        println!("launcher window 0");
+                    } else if window_id == launcher_window_1 {
+                        println!("launcher window 1");
+                    }
                     unsafe {
                         let error = Command::new("gedit")
                             .arg("hello")
