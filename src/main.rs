@@ -245,36 +245,17 @@ fonts
     Fills the destination rectangle with the background pixel from gc, then paints the text with the foreground pixel from gc. The upper-left corner of the filled rectangle is at [x, y - font-ascent]. The width is overall-width, the height is font-ascent + font-descent. The overall-width, font-ascent and font-descent are as returned by xcb_query_text_extents (TODO).
 */
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (conn, screen_num) = x11rb::connect(None).unwrap();
-    let atoms = AtomCollection::new(&conn)?.reply()?;
-    let screen = &conn.setup().roots[screen_num];
-    let width: u16 = 64;
-    let height: u16 = 64;
-    let depth = screen.root_depth;
-    let root = screen.root;
+fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, width: u16, height: u16) -> Result<(), Box<dyn std::error::Error>> {
+    let image = new_x_image(load_scale_image("idea.png", width, height));
+
     let pixmap_id = conn.generate_id().unwrap();
+    let depth = screen.root_depth;
     conn.create_pixmap(depth, pixmap_id, root, width, height)
         .unwrap(); // TODO: automatically recreate when depth changes (or size changes--which it shouldn't).
-    let gc_id = conn.generate_id().unwrap();
-    let gc_aux = CreateGCAux::new().foreground(screen.white_pixel);
-    conn.create_gc(gc_id, root, &gc_aux).unwrap();
-    let change = ChangeGCAux::default()
-        .foreground(Some(0))
-        .fill_style(Some(FillStyle::SOLID)); // TODO: font, subwindow_mode, fill_rule, fill_style
-    conn.change_gc(gc_id, &change)?.check();
 
-    //conn.set_foreground(gc_id, 0/*FIXME*/);
-    // TODO: conn.poly_fill_rectangle(pixmap_id, gc_id, &[rect]).unwrap();
-    //conn.copy_area(pixmap, root, gc, 0, 0, 0, 0, 400, 400).unwrap();
-    //conn.flush().unwrap();
+    image.put(conn, pixmap_id, gc_id, 0, 0).unwrap(); // FIXME: if shm, use shm!
 
-    //use std::io::Cursor;
-    // TODO: scale
-    let image = new_x_image(load_scale_image("idea.png", width, height));
-    image.put(&conn, pixmap_id, gc_id, 0, 0).unwrap(); // FIXME: if shm, use shm!
-
-    let (mainwin_id, iconwin_id) = create_window(&atoms, &conn, &screen, width, height)?;
+    let (mainwin_id, iconwin_id) = create_window(atoms, conn, screen, width, height)?;
     let change = ChangeWindowAttributesAux::default()
         .event_mask(
             EventMask::BUTTON_PRESS
@@ -298,6 +279,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     conn.map_window(mainwin_id)?;
     conn.map_window(iconwin_id)?;
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (conn, screen_num) = x11rb::connect(None).unwrap();
+    let atoms = AtomCollection::new(&conn)?.reply()?;
+    let screen = &conn.setup().roots[screen_num];
+    let width: u16 = 64;
+    let height: u16 = 64;
+    let root = screen.root;
+    let gc_id = conn.generate_id().unwrap();
+    let gc_aux = CreateGCAux::new().foreground(screen.white_pixel);
+    conn.create_gc(gc_id, root, &gc_aux).unwrap();
+    let change = ChangeGCAux::default()
+        .foreground(Some(0))
+        .fill_style(Some(FillStyle::SOLID)); // TODO: font, subwindow_mode, fill_rule, fill_style
+    conn.change_gc(gc_id, &change)?.check();
+
+    //conn.set_foreground(gc_id, 0/*FIXME*/);
+    // TODO: conn.poly_fill_rectangle(pixmap_id, gc_id, &[rect]).unwrap();
+    //conn.copy_area(pixmap, root, gc, 0, 0, 0, 0, 400, 400).unwrap();
+    //conn.flush().unwrap();
+
+    create_launcher(&atoms, &conn, &screen, gc_id, root, width, height).unwrap();
+
     conn.flush();
     loop {
         let event = conn.wait_for_event()?;
