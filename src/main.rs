@@ -263,10 +263,12 @@ fonts
 struct Launcher {
     icon_window_id: Window,
     args: Vec<OsString>,
+    startup_notify: Option<bool>,
+    startup_wm_class: Option<String>,
     // TODO: startup notification flag etc
 }
 
-fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &Path, width: u16, height: u16, args: Vec<OsString>) -> Result<Launcher, Box<dyn std::error::Error>> {
+fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &Path, width: u16, height: u16, args: Vec<OsString>, startup_notify: Option<bool>, startup_wm_class: Option<String>) -> Result<Launcher, Box<dyn std::error::Error>> {
     let image = new_x_image(load_scale_image(icon_name, width, height)?)?;
 // TODO: image::imageops: blur, brighten, invert
 // TODO: See also https://crates.io/crates/imageproc
@@ -305,6 +307,8 @@ fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Scree
     Ok(Launcher {
         icon_window_id: iconwin_id,
         args: args, // .iter().map(|x| x.to_string()).collect::<Vec<String>>(),
+        startup_notify,
+        startup_wm_class,
     })
 }
 
@@ -456,7 +460,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             None => Path::new("printer.png").to_path_buf(),
                         };
                         //println!("ICON PATH {:?}", icon_path);
-                        let launcher = create_launcher(&atoms, &conn, &screen, gc_id, root, &icon_path, width, height, args);
+                        let launcher = create_launcher(&atoms, &conn, &screen, gc_id, root, &icon_path, width, height, args, startup_notify, startup_wm_class);
                         match launcher {
                             Ok(launcher) => launchers.push(launcher),
                             Err(x) => {
@@ -483,23 +487,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let window_id = x.event;
                     let launcher = launchers.iter().find(|&launcher| launcher.icon_window_id == window_id).unwrap();
                     let args = launcher.args.clone();
+                    let startup_notify = launcher.startup_notify;
                     unsafe {
                         let error = Command::new("env")
                             .pre_exec(move || {
                                 use arrform::{arrform, ArrForm};
-                                let pid = std::process::id();
-                                // See <https://cgit.freedesktop.org/startup-notification/tree/doc/startup-notification.txt>
-                                let desktop_startup_id = arrform!(
-                                    280,
-                                    "DESKTOP_STARTUP_ID={:?}+{}+_TIME{}",
-                                    hostname,
-                                    pid,
-                                    time
-                                );
-                                let err = exec::Command::new("env")
-                                .arg(desktop_startup_id.as_str().to_string())
-                                .args(&args)
-                                .exec();
+                                let err = if startup_notify.is_some() && startup_notify.unwrap() {
+                                    let pid = std::process::id();
+                                    // See <https://cgit.freedesktop.org/startup-notification/tree/doc/startup-notification.txt>
+                                    let desktop_startup_id = arrform!(
+                                        280,
+                                        "DESKTOP_STARTUP_ID={:?}+{}+_TIME{}",
+                                        hostname,
+                                        pid,
+                                        time
+                                    );
+                                    exec::Command::new("env")
+                                    .arg(desktop_startup_id.as_str().to_string())
+                                    .args(&args)
+                                    .exec()
+                                } else {
+                                    exec::Command::new("env")
+                                    .args(&args)
+                                    .exec()
+                                };
                                 // TODO: on launchee startup failure, we should treat the launch sequence as ended and we send the "end" message ourselves.
                                 Err(match err {
                                     exec::Error::BadArgument(e) => {
