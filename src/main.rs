@@ -7,6 +7,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use which::which;
 use x11rb::properties::WmHints;
 use x11rb::properties::WmHintsState;
 use x11rb::protocol::xproto::*;
@@ -487,8 +488,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 if let Some(ref try_exec) = desktop_entry.try_exec {
                     let args = prepare_args(try_exec);
-                    if let Err(error) = Command::new(&args[0]).args(args).spawn() {
-                        continue
+                    if args.len() > 0 {
+                        if let Err(_) = which(&args[0]) {
+                            continue
+                        }
                     }
                 }
                 match desktop_entry.exec {
