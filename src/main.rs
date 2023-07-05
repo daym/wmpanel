@@ -58,8 +58,8 @@ atom_manager! {
     }
 }
 
-fn load_scale_image(target_width: u16, target_height: u16) -> image::DynamicImage {
-    let img = image::io::Reader::open("idea.png")
+fn load_scale_image(name: &str, target_width: u16, target_height: u16) -> image::DynamicImage {
+    let img = image::io::Reader::open(name)
         .unwrap()
         .decode()
         .unwrap(); // into_rgba8()
@@ -240,8 +240,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     //use std::io::Cursor;
     // TODO: scale
-    let img = load_scale_image(width, height);
-    let image = new_x_image(img);
+    let image = new_x_image(load_scale_image("idea.png", width, height));
     image.put(&conn, pixmap_id, gc_id, 0, 0).unwrap(); // FIXME: if shm, use shm!
 
     let change = ChangeWindowAttributesAux::default()
