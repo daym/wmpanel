@@ -1,18 +1,18 @@
 use x11rb::atom_manager;
 use x11rb::connection::Connection;
 //use x11rb::errors::ReplyOrIdError;
-use std::path::Path;
 use std::borrow::Cow;
-use std::process::Command;
 use std::collections::HashSet;
+use std::ffi::OsString;
 use std::fs;
+use std::path::Path;
+use std::process::Command;
 use x11rb::properties::WmHints;
 use x11rb::properties::WmHintsState;
 use x11rb::protocol::xproto::*;
 use x11rb::protocol::Event;
-use x11rb::COPY_DEPTH_FROM_PARENT;
 use x11rb::rust_connection::RustConnection;
-use std::ffi::OsString;
+use x11rb::COPY_DEPTH_FROM_PARENT;
 
 /* TODO:
 
@@ -63,14 +63,22 @@ atom_manager! {
     }
 }
 
-fn load_scale_image(name: &Path, target_width: u16, target_height: u16) -> Result<image::DynamicImage, Box<dyn std::error::Error>> {
+fn load_scale_image(
+    name: &Path,
+    target_width: u16,
+    target_height: u16,
+) -> Result<image::DynamicImage, Box<dyn std::error::Error>> {
     let img = image::io::Reader::open(name)?.decode()?;
-                   // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
+    // let img2 = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?.decode()?;
 
     use image::imageops;
     use image::imageops::FilterType;
     // TODO: Keep aspect ratio somehow
-    let img = img.resize(target_width.into(), target_height.into(), FilterType::Gaussian);
+    let img = img.resize(
+        target_width.into(),
+        target_height.into(),
+        FilterType::Gaussian,
+    );
 
     /*
     let image: &dyn GenericImageView<Pixel=Rgb<u8>> = &buffer;
@@ -93,7 +101,9 @@ fn load_scale_image(name: &Path, target_width: u16, target_height: u16) -> Resul
     Ok(img)
 }
 
-fn new_x_image(img: image::DynamicImage) -> Result<x11rb::image::Image<'static>, Box<dyn std::error::Error>> {
+fn new_x_image(
+    img: image::DynamicImage,
+) -> Result<x11rb::image::Image<'static>, Box<dyn std::error::Error>> {
     let image_width = u16::try_from(img.width())?;
     let image_height = u16::try_from(img.height())?;
     let mut image_data = img.into_rgba8();
@@ -101,12 +111,12 @@ fn new_x_image(img: image::DynamicImage) -> Result<x11rb::image::Image<'static>,
         let image::Rgba(data) = *pixel;
         // apparently, x11rb wants [b, g, r, a] and we have [r, g, b, a].
         if data[3] == 0 {
-            *pixel = image::Rgba([0xa0, 0xa0, 0xa0, 255]);  // very good
+            *pixel = image::Rgba([0xa0, 0xa0, 0xa0, 255]); // very good
         } else {
-            *pixel = image::Rgba([data[2], data[1], data[0], data[3]]);  // very good
+            *pixel = image::Rgba([data[2], data[1], data[0], data[3]]); // very good
         }
         // *pixel = image::Rgba([0, 0, 100, 255]);  // very good
-                           // ^b  ^g ^r  ^ignored
+        // ^b  ^g ^r  ^ignored
         // *pixel = image::Rgba([data[1], data[2], data[3], data[0]]);
     }
     use image::Rgba;
@@ -135,7 +145,13 @@ fn new_x_image(img: image::DynamicImage) -> Result<x11rb::image::Image<'static>,
     Ok(image)
 }
 
-fn create_window(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, width: u16, height: u16) -> Result<(u32, u32), Box<dyn std::error::Error>> {
+fn create_window(
+    atoms: &AtomCollection,
+    conn: &RustConnection,
+    screen: &Screen,
+    width: u16,
+    height: u16,
+) -> Result<(u32, u32), Box<dyn std::error::Error>> {
     use std::os::unix::ffi::OsStrExt;
     let mainwin_id = conn.generate_id()?;
     conn.create_window(
@@ -268,10 +284,22 @@ struct Launcher {
     // TODO: startup notification flag etc
 }
 
-fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &Path, width: u16, height: u16, args: Vec<OsString>, startup_notify: Option<bool>, startup_wm_class: Option<String>) -> Result<Launcher, Box<dyn std::error::Error>> {
+fn create_launcher(
+    atoms: &AtomCollection,
+    conn: &RustConnection,
+    screen: &Screen,
+    gc_id: u32,
+    root: u32,
+    icon_name: &Path,
+    width: u16,
+    height: u16,
+    args: Vec<OsString>,
+    startup_notify: Option<bool>,
+    startup_wm_class: Option<String>,
+) -> Result<Launcher, Box<dyn std::error::Error>> {
     let image = new_x_image(load_scale_image(icon_name, width, height)?)?;
-// TODO: image::imageops: blur, brighten, invert
-// TODO: See also https://crates.io/crates/imageproc
+    // TODO: image::imageops: blur, brighten, invert
+    // TODO: See also https://crates.io/crates/imageproc
 
     let pixmap_id = conn.generate_id().unwrap();
     let depth = screen.root_depth;
@@ -330,10 +358,10 @@ use std::fs::read_to_string;
 
 fn read_lines(filename: &str) -> Vec<String> {
     read_to_string(filename)
-        .unwrap()  // panic on possible file-reading errors
-        .lines()  // split the string into an iterator of string slices
-        .map(String::from)  // make each slice into a string
-        .collect()  // gather them together into a vector
+        .unwrap() // panic on possible file-reading errors
+        .lines() // split the string into an iterator of string slices
+        .map(String::from) // make each slice into a string
+        .collect() // gather them together into a vector
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -358,37 +386,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //conn.flush().unwrap();
     let mut launchers = Vec::<Launcher>::new();
 
-/* crate "xdg"
-    let xdg_dirs = xdg::BaseDirectories::new().unwrap();
-    let applicationss = xdg_dirs.find_data_files("applications");
-    for applications in applicationss {
-        for entry in fs::read_dir(applications).unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            if path.extension().unwrap() == "desktop" {
-                println!("{:?}", entry);
+    /* crate "xdg"
+        let xdg_dirs = xdg::BaseDirectories::new().unwrap();
+        let applicationss = xdg_dirs.find_data_files("applications");
+        for applications in applicationss {
+            for entry in fs::read_dir(applications).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if path.extension().unwrap() == "desktop" {
+                    println!("{:?}", entry);
+                }
             }
         }
-    }
 
-    modules:
-    basedir
-    categories
-    icon_finder
-    
-*/
+        modules:
+        basedir
+        categories
+        icon_finder
 
+    */
+
+    use xdgkit::basedir::applications;
     use xdgkit::desktop_entry::DesktopEntry;
-    use xdgkit::basedir::{applications};
     let desktop_directories = applications().unwrap();
     let desktop_directories = desktop_directories.split(":").collect::<Vec<&str>>();
     let mut seen_desktop_directories = HashSet::<String>::new();
     for desktop_directory in desktop_directories {
-        if desktop_directory == "" { // bug in xdgkit
-            continue
+        if desktop_directory == "" {
+            // bug in xdgkit
+            continue;
         }
         if seen_desktop_directories.contains(desktop_directory) {
-            continue
+            continue;
         }
         seen_desktop_directories.insert(desktop_directory.to_string());
         //println!("DESKTOP DIR {:?}", desktop_directory);
@@ -398,7 +427,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(file_name) = path.file_name() {
                 let file_name = file_name.to_str().unwrap().to_string();
                 if hidden_desktop_files.contains(&file_name) {
-                    continue
+                    continue;
                 }
             }
             if path.extension().unwrap() == "desktop" {
@@ -413,12 +442,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let not_show_in = not_show_in.split(";").collect::<Vec<&str>>().filter(|x| x != "").collect::<Vec<&str>>();
                     // FIXME check
                 }*/
-                // TODO: try_exec
                 let terminal = desktop_entry.terminal; // See xdg-settings get *
-                // gsettings get org.gnome.desktop.default-applications.terminal exec
-                // gsettings get org.gnome.desktop.default-applications.terminal exec-arg
-                // exo-open  --launch TerminalEmulator
-                // i3-sensible-terminal
+                                                       // gsettings get org.gnome.desktop.default-applications.terminal exec
+                                                       // gsettings get org.gnome.desktop.default-applications.terminal exec-arg
+                                                       // exo-open  --launch TerminalEmulator
+                                                       // i3-sensible-terminal
 
                 // also, ~/.local/share/applications/mimeapps.list ; [Default Applications] text/html=firefox.desktop
                 let startup_notify = desktop_entry.startup_notify;
@@ -428,7 +456,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     None => None,
                     Some(icon_name) => {
                         //println!("icon_name {}", icon_name);
-                        let mut result = xdgkit::icon_finder::find_icon(icon_name.to_string(), 64, 1);
+                        let mut result =
+                            xdgkit::icon_finder::find_icon(icon_name.to_string(), 64, 1);
                         /*if result.is_none() {
                             result = xdgkit::icon_finder::find_icon(icon_name.to_string() + "-symbolic", 64, 1);
                             if result.is_some() {
@@ -436,37 +465,62 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }*/
                         result
-                    },
-                };
-                match desktop_entry.exec {
-                    None => {
                     }
-                    Some(ref command_line) => {
-                        let args = command_line
+                };
+                let prepare_args = |command_line: &String| {
+                    command_line
                         .split(" ")
                         .flat_map(|x| match x {
-                           "%F" | "%f" | "%u" | "%U" => vec![],
-                           // Deprecated
-                           "%d" | "%D" | "%n" | "%N" | "%v" | "%m" => vec![],
-                           "%k" => vec![OsString::from(path.clone())],
-                           "%c" => vec![OsString::from(name.clone().unwrap_or_default())],
-                           "%i" => vec![OsString::from("--icon"), icon.clone().unwrap_or_default().into()],
-                           x => vec![OsString::from(x)],
+                            "%F" | "%f" | "%u" | "%U" => vec![],
+                            // Deprecated
+                            "%d" | "%D" | "%n" | "%N" | "%v" | "%m" => vec![],
+                            "%k" => vec![OsString::from(path.clone())],
+                            "%c" => vec![OsString::from(name.clone().unwrap_or_default())],
+                            "%i" => vec![
+                                OsString::from("--icon"),
+                                icon.clone().unwrap_or_default().into(),
+                            ],
+                            x => vec![OsString::from(x)],
                         })
-                        .collect::<Vec<OsString>>();
-                        
+                        .collect::<Vec<OsString>>()
+                };
+
+                if let Some(ref try_exec) = desktop_entry.try_exec {
+                    let args = prepare_args(try_exec);
+                    if let Err(error) = Command::new(&args[0]).args(args).spawn() {
+                        continue
+                    }
+                }
+                match desktop_entry.exec {
+                    None => {}
+                    Some(ref command_line) => {
+                        let args = prepare_args(command_line);
+
                         let icon_path = match icon {
                             Some(x) => {
-                                if x == Path::new("").to_path_buf() { // XXX
+                                if x == Path::new("").to_path_buf() {
+                                    // XXX
                                     Path::new("printer.png").to_path_buf()
                                 } else {
                                     x
                                 }
-                            },
+                            }
                             None => Path::new("printer.png").to_path_buf(),
                         };
                         //println!("ICON PATH {:?}", icon_path);
-                        let launcher = create_launcher(&atoms, &conn, &screen, gc_id, root, &icon_path, width, height, args, startup_notify, startup_wm_class);
+                        let launcher = create_launcher(
+                            &atoms,
+                            &conn,
+                            &screen,
+                            gc_id,
+                            root,
+                            &icon_path,
+                            width,
+                            height,
+                            args,
+                            startup_notify,
+                            startup_wm_class,
+                        );
                         match launcher {
                             Ok(launcher) => launchers.push(launcher),
                             Err(x) => {
@@ -488,10 +542,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Event::ButtonRelease(x) => {
                 use std::os::unix::process::CommandExt;
                 let hostname = hostname::get().unwrap();
-                if x.detail == 1 { // x.state.contains(KeyButMask::BUTTON1) {
+                if x.detail == 1 {
+                    // x.state.contains(KeyButMask::BUTTON1) {
                     let time = x.time;
                     let window_id = x.event;
-                    let launcher = launchers.iter().find(|&launcher| launcher.icon_window_id == window_id).unwrap();
+                    let launcher = launchers
+                        .iter()
+                        .find(|&launcher| launcher.icon_window_id == window_id)
+                        .unwrap();
                     let args = launcher.args.clone();
                     let startup_notify = launcher.startup_notify;
                     unsafe {
@@ -509,13 +567,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         time
                                     );
                                     exec::Command::new("env")
-                                    .arg(desktop_startup_id.as_str().to_string())
-                                    .args(&args)
-                                    .exec()
+                                        .arg(desktop_startup_id.as_str().to_string())
+                                        .args(&args)
+                                        .exec()
                                 } else {
-                                    exec::Command::new("env")
-                                    .args(&args)
-                                    .exec()
+                                    exec::Command::new("env").args(&args).exec()
                                 };
                                 // TODO: on launchee startup failure, we should treat the launch sequence as ended and we send the "end" message ourselves.
                                 Err(match err {
