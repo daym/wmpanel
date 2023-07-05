@@ -12,6 +12,7 @@ use x11rb::protocol::xproto::*;
 use x11rb::protocol::Event;
 use x11rb::COPY_DEPTH_FROM_PARENT;
 use x11rb::rust_connection::RustConnection;
+use std::ffi::OsString;
 
 /* TODO:
 
@@ -95,7 +96,19 @@ fn load_scale_image(name: &Path, target_width: u16, target_height: u16) -> Resul
 fn new_x_image(img: image::DynamicImage) -> Result<x11rb::image::Image<'static>, Box<dyn std::error::Error>> {
     let image_width = u16::try_from(img.width())?;
     let image_height = u16::try_from(img.height())?;
-    let image_data = img.into_rgba8();
+    let mut image_data = img.into_rgba8();
+    for (x, y, pixel) in image_data.enumerate_pixels_mut() {
+        let image::Rgba(data) = *pixel;
+        // apparently, x11rb wants [b, g, r, a] and we have [r, g, b, a].
+        if data[3] == 0 {
+            *pixel = image::Rgba([0xa0, 0xa0, 0xa0, 255]);  // very good
+        } else {
+            *pixel = image::Rgba([data[2], data[1], data[0], data[3]]);  // very good
+        }
+        // *pixel = image::Rgba([0, 0, 100, 255]);  // very good
+                           // ^b  ^g ^r  ^ignored
+        // *pixel = image::Rgba([data[1], data[2], data[3], data[0]]);
+    }
     use image::Rgba;
     //use image::ImageBuffer;
     //let s: ImageBuffer<Rgba<u8>, Vec<u8>> = image_data;
@@ -105,7 +118,7 @@ fn new_x_image(img: image::DynamicImage) -> Result<x11rb::image::Image<'static>,
         x11rb::image::ScanlinePad::Pad8,
         24, /* depth */
         x11rb::image::BitsPerPixel::B32,
-        x11rb::image::ImageOrder::LsbFirst,
+        x11rb::image::ImageOrder::MsbFirst, // no effect
         Cow::Owned(image_data.into_raw()),
     )?;
 
@@ -249,12 +262,14 @@ fonts
 
 struct Launcher {
     icon_window_id: Window,
-    args: Vec<String>,
+    args: Vec<OsString>,
     // TODO: startup notification flag etc
 }
 
-fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &Path, width: u16, height: u16, args: Vec<&str>) -> Result<Launcher, Box<dyn std::error::Error>> {
+fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Screen, gc_id: u32, root: u32, icon_name: &Path, width: u16, height: u16, args: Vec<OsString>) -> Result<Launcher, Box<dyn std::error::Error>> {
     let image = new_x_image(load_scale_image(icon_name, width, height)?)?;
+// TODO: image::imageops: blur, brighten, invert
+// TODO: See also https://crates.io/crates/imageproc
 
     let pixmap_id = conn.generate_id().unwrap();
     let depth = screen.root_depth;
@@ -289,7 +304,7 @@ fn create_launcher(atoms: &AtomCollection, conn: &RustConnection, screen: &Scree
     conn.map_window(iconwin_id)?;
     Ok(Launcher {
         icon_window_id: iconwin_id,
-        args: args.iter().map(|x| x.to_string()).collect::<Vec<String>>(),
+        args: args, // .iter().map(|x| x.to_string()).collect::<Vec<String>>(),
     })
 }
 
@@ -383,20 +398,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             if path.extension().unwrap() == "desktop" {
-                let desktop_entry = DesktopEntry::read(fs::read_to_string(path).unwrap());
+                let desktop_entry = DesktopEntry::read(fs::read_to_string(&path).unwrap());
+                let name = desktop_entry.name;
                 let icon = match desktop_entry.icon {
                     None => None,
                     Some(icon_name) => {
                         //println!("icon_name {}", icon_name);
-                        xdgkit::icon_finder::find_icon(icon_name.to_string(), 64, 1)
+                        let mut result = xdgkit::icon_finder::find_icon(icon_name.to_string(), 64, 1);
+                        /*if result.is_none() {
+                            result = xdgkit::icon_finder::find_icon(icon_name.to_string() + "-symbolic", 64, 1);
+                            if result.is_some() {
+                                eprintln!("-symbolic");
+                            }
+                        }*/
+                        result
                     },
                 };
-                // TODO: name, comment, icon, only_show_in, not_show_in, try_exec, terminal, startup_notify, startup_wm_class
+                // TODO: name opt str, comment opt str, only_show_in none, not_show_in none, try_exec none, terminal opt bool, startup_notify opt bool, startup_wm_class opt str
+                // if only_show_in is some continue
+                // not_show_in dunno
                 match desktop_entry.exec {
                     None => {
                     }
                     Some(ref command_line) => {
-                        let args = command_line.split(" ").collect::<Vec<&str>>();
+                        let args = command_line
+                        .split(" ")
+                        .flat_map(|x| match x {
+                           "%F" | "%f" | "%u" | "%U" => vec![],
+                           // Deprecated
+                           "%d" | "%D" | "%n" | "%N" | "%v" | "%m" => vec![],
+                           "%k" => vec![OsString::from(path.clone())],
+                           "%c" => vec![OsString::from(name.clone().unwrap_or_default())],
+                           "%i" => vec![OsString::from("--icon"), icon.clone().unwrap_or_default().into()],
+                           x => vec![OsString::from(x)],
+                        })
+                        .collect::<Vec<OsString>>();
+                        
                         let icon_path = match icon {
                             Some(x) => {
                                 if x == Path::new("").to_path_buf() { // XXX
@@ -419,8 +456,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        //launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "idea.png", width, height, vec!["idea".to_string()]).unwrap());
-        //launchers.push(create_launcher(&atoms, &conn, &screen, gc_id, root, "printer.png", width, height, vec!["gedit".to_string(), "hello".to_string()]).unwrap());
     }
     let launchers = &launchers;
 
@@ -450,14 +485,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     pid,
                                     time
                                 );
-                                use exec::execvp;
-                                let mut new_args = vec!["env".to_string(), desktop_startup_id.as_str().to_string()];
-                                new_args.extend_from_slice(&args[..]);
-                                let args = new_args;
-                                let err = execvp(
-                                    "env",
-                                    &args,
-                                );
+                                let err = exec::Command::new("env")
+                                .arg(desktop_startup_id.as_str().to_string())
+                                .args(&args)
+                                .exec();
                                 Err(match err {
                                     exec::Error::BadArgument(e) => {
                                         panic!("bad argument")
