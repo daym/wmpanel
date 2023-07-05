@@ -251,7 +251,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let screen = &conn.setup().roots[screen_num];
     let width: u16 = 64;
     let height: u16 = 64;
-    let (mainwin_id, iconwin_id) = create_window(&atoms, &conn, &screen, width, height)?;
     let depth = screen.root_depth;
     let root = screen.root;
     let pixmap_id = conn.generate_id().unwrap();
@@ -275,6 +274,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let image = new_x_image(load_scale_image("idea.png", width, height));
     image.put(&conn, pixmap_id, gc_id, 0, 0).unwrap(); // FIXME: if shm, use shm!
 
+    let (mainwin_id, iconwin_id) = create_window(&atoms, &conn, &screen, width, height)?;
     let change = ChangeWindowAttributesAux::default()
         .event_mask(
             EventMask::BUTTON_PRESS
