@@ -276,8 +276,8 @@ fn render_scale_image(
         let mut fontdb = fontdb::Database::new();
         fontdb.load_system_fonts();
 
-        let svg_data = std::fs::read(filename).unwrap();
-        let mut tree = usvg::Tree::from_data(&svg_data, &opt).unwrap();
+        let svg_data = std::fs::read(filename)?;
+        let mut tree = usvg::Tree::from_data(&svg_data, &opt)?;
         tree.convert_text(&fontdb);
         resvg::Tree::from_usvg(&tree)
     };
@@ -549,10 +549,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     // XXX
                                     //eprintln!("Icon {:?} not found or something", desktop_entry.icon);
                                     //Path::new("printer.png").to_path_buf()
-                                    let p = Path::new(&desktop_entry.icon.unwrap()).to_path_buf();
+                                    let icon_name = desktop_entry.icon.unwrap();
+                                    let p = Path::new(&icon_name).to_path_buf();
                                     if p.exists() {
                                         p
                                     } else {
+                                        eprintln!("icon {:?} not found", &icon_name);
                                         Path::new("printer.png").to_path_buf()
                                     }
                                 } else {
@@ -560,7 +562,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                             None => {
-                                eprintln!("Icon {:?} not found", desktop_entry.icon);
+                                eprintln!("Icon {:?} not found", &desktop_entry.icon);
                                 Path::new("printer.png").to_path_buf()
                             }
                         };
