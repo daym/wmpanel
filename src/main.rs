@@ -287,17 +287,11 @@ fn render_scale_image(
     let design_size = rtree.size.to_int_size();
     let scale_x = target_width as f32 / design_size.width() as f32;
     let scale_y = target_height as f32 / design_size.height() as f32;
-    let scale = if scale_x < scale_y {
-        scale_x
-    } else {
-        scale_y
-    };
+    let scale = if scale_x < scale_y { scale_x } else { scale_y };
     let pixmap_size = design_size.scale_by(scale).unwrap();
     let render_ts = usvg::Transform::from_scale(scale, scale);
     rtree.render(render_ts, &mut pixmap.as_mut());
-    println!("XXX {:?}", filename);
     Ok(pixmap)
-    //pixmap.as_ref().data(); // [u8]
 }
 
 fn create_launcher(
@@ -318,18 +312,18 @@ fn create_launcher(
         let image_width = u16::try_from(local_image.width())?;
         let image_height = u16::try_from(local_image.height())?;
         let mut image_data = local_image.into_rgba8();
-    for (x, y, pixel) in image_data.enumerate_pixels_mut() {
-        let image::Rgba(data) = *pixel;
-        // apparently, x11rb wants [b, g, r, a] and we have [r, g, b, a].
-        if data[3] == 0 {
-            *pixel = image::Rgba([0xa0, 0xa0, 0xa0, 255]); // very good
-        } else {
-            *pixel = image::Rgba([data[2], data[1], data[0], data[3]]); // very good
+        for (x, y, pixel) in image_data.enumerate_pixels_mut() {
+            let image::Rgba(data) = *pixel;
+            // apparently, x11rb wants [b, g, r, a] and we have [r, g, b, a].
+            if data[3] == 0 {
+                *pixel = image::Rgba([0xa0, 0xa0, 0xa0, 255]); // very good
+            } else {
+                *pixel = image::Rgba([data[2], data[1], data[0], data[3]]); // very good
+            }
+            // *pixel = image::Rgba([0, 0, 100, 255]);  // very good
+            // ^b  ^g ^r  ^ignored
+            // *pixel = image::Rgba([data[1], data[2], data[3], data[0]]);
         }
-        // *pixel = image::Rgba([0, 0, 100, 255]);  // very good
-        // ^b  ^g ^r  ^ignored
-        // *pixel = image::Rgba([data[1], data[2], data[3], data[0]]);
-    }
 
         new_x_image(image_width, image_height, &image_data)?
     } else {
@@ -474,12 +468,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let desktop_entry = DesktopEntry::read(fs::read_to_string(&path).unwrap());
                 if let Some(hidden) = desktop_entry.hidden {
                     if hidden {
-                        continue
+                        continue;
                     }
                 }
                 if let Some(no_display) = desktop_entry.no_display {
                     if no_display {
-                        continue
+                        continue;
                     }
                 }
                 let name = desktop_entry.name;
@@ -540,7 +534,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let args = prepare_args(try_exec);
                     if args.len() > 0 {
                         if let Err(_) = which(&args[0]) {
-                            continue
+                            continue;
                         }
                     }
                 }
@@ -612,7 +606,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .pre_exec(move || {
                                 use arrform::{arrform, ArrForm};
                                 if let Some(working_directory) = &working_directory {
-                                    std::env::set_current_dir(working_directory); // TODO: is that safe?
+                                    std::env::set_current_dir(working_directory);
+                                    // TODO: is that safe?
                                 }
                                 let err = if startup_notify.is_some() && startup_notify.unwrap() {
                                     let pid = std::process::id();
