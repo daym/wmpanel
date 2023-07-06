@@ -107,23 +107,10 @@ fn load_scale_image(
 }
 
 fn new_x_image(
-    img: image::DynamicImage,
+    image_width: u16,
+    image_height: u16,
+    image_data: &[u8],
 ) -> Result<x11rb::image::Image<'static>, Box<dyn std::error::Error>> {
-    let image_width = u16::try_from(img.width())?;
-    let image_height = u16::try_from(img.height())?;
-    let mut image_data = img.into_rgba8();
-    for (x, y, pixel) in image_data.enumerate_pixels_mut() {
-        let image::Rgba(data) = *pixel;
-        // apparently, x11rb wants [b, g, r, a] and we have [r, g, b, a].
-        if data[3] == 0 {
-            *pixel = image::Rgba([0xa0, 0xa0, 0xa0, 255]); // very good
-        } else {
-            *pixel = image::Rgba([data[2], data[1], data[0], data[3]]); // very good
-        }
-        // *pixel = image::Rgba([0, 0, 100, 255]);  // very good
-        // ^b  ^g ^r  ^ignored
-        // *pixel = image::Rgba([data[1], data[2], data[3], data[0]]);
-    }
     use image::Rgba;
     //use image::ImageBuffer;
     //let s: ImageBuffer<Rgba<u8>, Vec<u8>> = image_data;
@@ -134,7 +121,7 @@ fn new_x_image(
         24, /* depth */
         x11rb::image::BitsPerPixel::B32,
         x11rb::image::ImageOrder::MsbFirst, // no effect
-        Cow::Owned(image_data.into_raw()),
+        Cow::Owned(image_data.to_vec()),
     )?;
 
     /*
@@ -290,6 +277,36 @@ struct Launcher {
     working_directory: Option<OsString>,
 }
 
+fn render_scale_image(
+    filename: &Path,
+) -> Result<resvg::tiny_skia::Pixmap, Box<dyn std::error::Error>> {
+    use usvg::{fontdb, TreeParsing, TreeTextToPath};
+
+    // resvg::Tree own all the required data and does not require
+    // the input file, usvg::Tree or anything else.
+    let rtree = {
+        let mut opt = usvg::Options::default();
+        // Get file's absolute directory.
+        opt.resources_dir = std::fs::canonicalize(filename)
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+
+        let mut fontdb = fontdb::Database::new();
+        fontdb.load_system_fonts();
+
+        let svg_data = std::fs::read(filename).unwrap();
+        let mut tree = usvg::Tree::from_data(&svg_data, &opt).unwrap();
+        tree.convert_text(&fontdb);
+        resvg::Tree::from_usvg(&tree)
+    };
+
+    let pixmap_size = rtree.size.to_int_size();
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height()).unwrap();
+    rtree.render(resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    Ok(pixmap)
+    //pixmap.as_ref().data(); // [u8]
+}
+
 fn create_launcher(
     atoms: &AtomCollection,
     conn: &RustConnection,
@@ -304,7 +321,29 @@ fn create_launcher(
     startup_wm_class: Option<String>,
     working_directory: Option<OsString>,
 ) -> Result<Launcher, Box<dyn std::error::Error>> {
-    let image = new_x_image(load_scale_image(icon_name, width, height)?)?;
+    let image = if let Ok(local_image) = load_scale_image(icon_name, width, height) {
+        let image_width = u16::try_from(local_image.width())?;
+        let image_height = u16::try_from(local_image.height())?;
+        let mut image_data = local_image.into_rgba8();
+    for (x, y, pixel) in image_data.enumerate_pixels_mut() {
+        let image::Rgba(data) = *pixel;
+        // apparently, x11rb wants [b, g, r, a] and we have [r, g, b, a].
+        if data[3] == 0 {
+            *pixel = image::Rgba([0xa0, 0xa0, 0xa0, 255]); // very good
+        } else {
+            *pixel = image::Rgba([data[2], data[1], data[0], data[3]]); // very good
+        }
+        // *pixel = image::Rgba([0, 0, 100, 255]);  // very good
+        // ^b  ^g ^r  ^ignored
+        // *pixel = image::Rgba([data[1], data[2], data[3], data[0]]);
+    }
+
+        new_x_image(image_width, image_height, &image_data)?
+    } else {
+        let image = render_scale_image(icon_name)?;
+        let image_data = image.as_ref().data();
+        new_x_image(width, height, &image_data)?
+    };
     // TODO: image::imageops: blur, brighten, invert
     // TODO: See also https://crates.io/crates/imageproc
 
