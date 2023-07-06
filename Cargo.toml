@@ -1,5 +1,5 @@
 [package]
-name = "wmpanel-rust"
+name = "wmpanel"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,10 +10,13 @@ arrform = "0.1.1"
 exec = "0.3.1"
 hostname = "0.3.1"
 image = "0.24.6"
+# TODO: turn off a lot of features of resvg
 resvg = "0.35.0"
 usvg = "0.35.0"
 which = "4.4.0"
 # TODO: features: cursor damage dpms image once_libloading cell randr render res resource_manager screensaver shape! shm sync! tracing xevie xinerama xfixes xf86vidmode xf86dri xinput xkb xprint xselinux xtest xv xvmc
 x11rb = { version = "0.12.0", features = ["image"] }
-xdgkit = "3.2.3"
+xdgkit = { path = "../xdgkit" }
+# xdgkit = "3.2.3"
+
 #xcb = "1.2.1"
