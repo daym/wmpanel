@@ -79,31 +79,11 @@ fn load_scale_image(
     use image::imageops;
     use image::imageops::FilterType;
     // TODO: Keep aspect ratio somehow
-    let img = img.resize(
+    Ok(img.resize(
         target_width.into(),
         target_height.into(),
         FilterType::Gaussian,
-    );
-
-    /*
-    let image: &dyn GenericImageView<Pixel=Rgb<u8>> = &buffer;
-    fn view(&self, x: u32, y: u32, width: u32, height: u32) -> SubImage<&Self>
-
-    Function image::imageops::resize
-
-    pub fn resize<I: GenericImageView>(
-        image: &I,
-        nwidth: u32,
-        nheight: u32,
-        filter: FilterType (Gaussian)
-    ) -> ImageBuffer<I::Pixel, Vec<<I::Pixel as Pixel>::Subpixel>>
-    where
-        I::Pixel: 'static,
-        <I::Pixel as Pixel>::Subpixel: 'static,
-
-
-    */
-    Ok(img)
+    ))
 }
 
 fn new_x_image(
@@ -279,6 +259,8 @@ struct Launcher {
 
 fn render_scale_image(
     filename: &Path,
+    target_width: u32,
+    target_height: u32,
 ) -> Result<resvg::tiny_skia::Pixmap, Box<dyn std::error::Error>> {
     use usvg::{fontdb, TreeParsing, TreeTextToPath};
 
@@ -300,9 +282,20 @@ fn render_scale_image(
         resvg::Tree::from_usvg(&tree)
     };
 
-    let pixmap_size = rtree.size.to_int_size();
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height()).unwrap();
-    rtree.render(resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    //let pixmap_size = rtree.size.to_int_size();
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(target_width, target_height).unwrap();
+    let design_size = rtree.size.to_int_size();
+    let scale_x = target_width as f32 / design_size.width() as f32;
+    let scale_y = target_height as f32 / design_size.height() as f32;
+    let scale = if scale_x < scale_y {
+        scale_x
+    } else {
+        scale_y
+    };
+    let pixmap_size = design_size.scale_by(scale).unwrap();
+    let render_ts = usvg::Transform::from_scale(scale, scale);
+    rtree.render(render_ts, &mut pixmap.as_mut());
+    println!("XXX {:?}", filename);
     Ok(pixmap)
     //pixmap.as_ref().data(); // [u8]
 }
@@ -340,7 +333,7 @@ fn create_launcher(
 
         new_x_image(image_width, image_height, &image_data)?
     } else {
-        let image = render_scale_image(icon_name)?;
+        let image = render_scale_image(icon_name, width.into(), height.into())?;
         let image_data = image.as_ref().data();
         new_x_image(width, height, &image_data)?
     };
