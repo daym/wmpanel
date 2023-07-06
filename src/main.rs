@@ -327,9 +327,19 @@ fn create_launcher(
 
         new_x_image(image_width, image_height, &image_data)?
     } else {
-        let image = render_scale_image(icon_name, width.into(), height.into())?;
-        let image_data = image.as_ref().data();
-        new_x_image(width, height, &image_data)?
+        if let Ok(image) = render_scale_image(icon_name, width.into(), height.into()) {
+            let image_data = image.as_ref().data();
+            new_x_image(width, height, &image_data)?
+        } else {
+            eprintln!("WTF");
+            let mut image_data = Vec::<u8>::new();
+            let size = 4usize * usize::from(width) * usize::from(height);
+            image_data.reserve(size);
+            for i in (0..size) {
+                image_data.push(0);
+            }
+            new_x_image(width, height, &image_data)?
+        }
     };
     // TODO: image::imageops: blur, brighten, invert
     // TODO: See also https://crates.io/crates/imageproc
