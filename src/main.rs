@@ -499,7 +499,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let icon = match desktop_entry.icon {
                     None => None,
-                    Some(icon_name) => {
+                    Some(ref icon_name) => {
                         //println!("icon_name {}", icon_name);
                         let mut result =
                             xdgkit::icon_finder::find_icon(icon_name.to_string(), 64, 1);
@@ -545,14 +545,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         let icon_path = match icon {
                             Some(x) => {
-                                if x == Path::new("").to_path_buf() {
+                                if x == Path::new("").to_path_buf() { // TODO: What in the world is xdgkit::icon_finder::find_icon doing here!?
                                     // XXX
-                                    Path::new("printer.png").to_path_buf()
+                                    //eprintln!("Icon {:?} not found or something", desktop_entry.icon);
+                                    //Path::new("printer.png").to_path_buf()
+                                    let p = Path::new(&desktop_entry.icon.unwrap()).to_path_buf();
+                                    if p.exists() {
+                                        p
+                                    } else {
+                                        Path::new("printer.png").to_path_buf()
+                                    }
                                 } else {
                                     x
                                 }
                             }
-                            None => Path::new("printer.png").to_path_buf(),
+                            None => {
+                                eprintln!("Icon {:?} not found", desktop_entry.icon);
+                                Path::new("printer.png").to_path_buf()
+                            }
                         };
                         //println!("ICON PATH {:?}", icon_path);
                         let launcher = create_launcher(
