@@ -6,10 +6,12 @@ use x11rb::atom_manager;
 use x11rb::connection::Connection;
 //use x11rb::errors::ReplyOrIdError;
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 use which::which;
 use x11rb::properties::WmHints;
@@ -455,6 +457,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let desktop_directories = applications().unwrap();
     let desktop_directories = desktop_directories.split(":").collect::<Vec<&str>>();
     let mut seen_desktop_directories = HashSet::<String>::new();
+    let mut seen_desktop_regular_files = BTreeMap::<String, PathBuf>::new(); // name, desktop file path
     for desktop_directory in desktop_directories {
         if desktop_directory == "" {
             // bug in xdgkit
@@ -476,127 +479,133 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if path.extension().unwrap() == "desktop" {
                 let desktop_entry = DesktopEntry::read(fs::read_to_string(&path).unwrap());
-                if let Some(hidden) = desktop_entry.hidden {
-                    if hidden {
-                        continue;
-                    }
+                if let Some(name) = desktop_entry.name {
+                    // sorts by name
+                    seen_desktop_regular_files.insert(name, path);
                 }
-                if let Some(no_display) = desktop_entry.no_display {
-                    if no_display {
-                        continue;
+            }
+        }
+    }
+    for (name, path) in &seen_desktop_regular_files {
+        let desktop_entry = DesktopEntry::read(fs::read_to_string(&path).unwrap());
+        if let Some(hidden) = desktop_entry.hidden {
+            if hidden {
+                continue;
+            }
+        }
+        if let Some(no_display) = desktop_entry.no_display {
+            if no_display {
+                continue;
+            }
+        }
+        if let Some(only_show_in) = desktop_entry.only_show_in {
+            if only_show_in.len() > 0 {
+                continue;
+            }
+        }
+        /*if let Some(not_show_in) = desktop_entry.not_show_in {
+            let not_show_in = not_show_in.split(";").collect::<Vec<&str>>().filter(|x| x != "").collect::<Vec<&str>>();
+            // FIXME check
+        }*/
+        let terminal = desktop_entry.terminal; // See xdg-settings get *
+                                               // gsettings get org.gnome.desktop.default-applications.terminal exec
+                                               // gsettings get org.gnome.desktop.default-applications.terminal exec-arg
+                                               // exo-open  --launch TerminalEmulator
+                                               // i3-sensible-terminal
+
+        // also, ~/.local/share/applications/mimeapps.list ; [Default Applications] text/html=firefox.desktop
+        let startup_notify = desktop_entry.startup_notify;
+        let startup_wm_class = desktop_entry.startup_wm_class;
+        let working_directory = desktop_entry.path.map(|x| OsString::from(x));
+
+        let icon = match desktop_entry.icon {
+            None => None,
+            Some(ref icon_name) => {
+                //println!("icon_name {}", icon_name);
+                let mut result = xdgkit::icon_finder::find_icon(icon_name.to_string(), 64, 1);
+                /*if result.is_none() {
+                    result = xdgkit::icon_finder::find_icon(icon_name.to_string() + "-symbolic", 64, 1);
+                    if result.is_some() {
+                        eprintln!("-symbolic");
                     }
-                }
-                let name = desktop_entry.name;
-                if let Some(only_show_in) = desktop_entry.only_show_in {
-                    if only_show_in.len() > 0 {
-                        continue;
-                    }
-                }
-                /*if let Some(not_show_in) = desktop_entry.not_show_in {
-                    let not_show_in = not_show_in.split(";").collect::<Vec<&str>>().filter(|x| x != "").collect::<Vec<&str>>();
-                    // FIXME check
                 }*/
-                let terminal = desktop_entry.terminal; // See xdg-settings get *
-                                                       // gsettings get org.gnome.desktop.default-applications.terminal exec
-                                                       // gsettings get org.gnome.desktop.default-applications.terminal exec-arg
-                                                       // exo-open  --launch TerminalEmulator
-                                                       // i3-sensible-terminal
+                result
+            }
+        };
+        let prepare_args = |command_line: &String| {
+            command_line
+                .split(" ")
+                .flat_map(|x| match x {
+                    "%F" | "%f" | "%u" | "%U" => vec![],
+                    // Deprecated
+                    "%d" | "%D" | "%n" | "%N" | "%v" | "%m" => vec![],
+                    "%k" => vec![OsString::from(path.clone())],
+                    "%c" => vec![OsString::from(name.clone())],
+                    "%i" => vec![
+                        OsString::from("--icon"),
+                        icon.clone().unwrap_or_default().into(),
+                    ],
+                    x => vec![OsString::from(x)],
+                })
+                .collect::<Vec<OsString>>()
+        };
 
-                // also, ~/.local/share/applications/mimeapps.list ; [Default Applications] text/html=firefox.desktop
-                let startup_notify = desktop_entry.startup_notify;
-                let startup_wm_class = desktop_entry.startup_wm_class;
-                let working_directory = desktop_entry.path.map(|x| OsString::from(x));
-
-                let icon = match desktop_entry.icon {
-                    None => None,
-                    Some(ref icon_name) => {
-                        //println!("icon_name {}", icon_name);
-                        let mut result =
-                            xdgkit::icon_finder::find_icon(icon_name.to_string(), 64, 1);
-                        /*if result.is_none() {
-                            result = xdgkit::icon_finder::find_icon(icon_name.to_string() + "-symbolic", 64, 1);
-                            if result.is_some() {
-                                eprintln!("-symbolic");
-                            }
-                        }*/
-                        result
-                    }
-                };
-                let prepare_args = |command_line: &String| {
-                    command_line
-                        .split(" ")
-                        .flat_map(|x| match x {
-                            "%F" | "%f" | "%u" | "%U" => vec![],
-                            // Deprecated
-                            "%d" | "%D" | "%n" | "%N" | "%v" | "%m" => vec![],
-                            "%k" => vec![OsString::from(path.clone())],
-                            "%c" => vec![OsString::from(name.clone().unwrap_or_default())],
-                            "%i" => vec![
-                                OsString::from("--icon"),
-                                icon.clone().unwrap_or_default().into(),
-                            ],
-                            x => vec![OsString::from(x)],
-                        })
-                        .collect::<Vec<OsString>>()
-                };
-
-                if let Some(ref try_exec) = desktop_entry.try_exec {
-                    let args = prepare_args(try_exec);
-                    if args.len() > 0 {
-                        if let Err(_) = which(&args[0]) {
-                            continue;
-                        }
-                    }
+        if let Some(ref try_exec) = desktop_entry.try_exec {
+            let args = prepare_args(try_exec);
+            if args.len() > 0 {
+                if let Err(_) = which(&args[0]) {
+                    continue;
                 }
-                match desktop_entry.exec {
-                    None => {}
-                    Some(ref command_line) => {
-                        let args = prepare_args(command_line);
+            }
+        }
+        match desktop_entry.exec {
+            None => {}
+            Some(ref command_line) => {
+                let args = prepare_args(command_line);
 
-                        let icon_path = match icon {
-                            Some(x) => {
-                                if x == Path::new("").to_path_buf() { // TODO: What in the world is xdgkit::icon_finder::find_icon doing here!?
-                                    // XXX
-                                    //eprintln!("Icon {:?} not found or something", desktop_entry.icon);
-                                    //Path::new("printer.png").to_path_buf()
-                                    let icon_name = desktop_entry.icon.unwrap();
-                                    let p = Path::new(&icon_name).to_path_buf();
-                                    if p.exists() {
-                                        p
-                                    } else {
-                                        eprintln!("icon {:?} not found", &icon_name);
-                                        Path::new("printer.png").to_path_buf()
-                                    }
-                                } else {
-                                    x
-                                }
-                            }
-                            None => {
-                                eprintln!("Icon {:?} not found", &desktop_entry.icon);
+                let icon_path = match icon {
+                    Some(x) => {
+                        if x == Path::new("").to_path_buf() {
+                            // TODO: What in the world is xdgkit::icon_finder::find_icon doing here!?
+                            // XXX
+                            //eprintln!("Icon {:?} not found or something", desktop_entry.icon);
+                            //Path::new("printer.png").to_path_buf()
+                            let icon_name = desktop_entry.icon.unwrap();
+                            let p = Path::new(&icon_name).to_path_buf();
+                            if p.exists() {
+                                p
+                            } else {
+                                eprintln!("icon {:?} not found", &icon_name);
                                 Path::new("printer.png").to_path_buf()
                             }
-                        };
-                        //println!("ICON PATH {:?}", icon_path);
-                        let launcher = create_launcher(
-                            &atoms,
-                            &conn,
-                            &screen,
-                            gc_id,
-                            root,
-                            &icon_path,
-                            width,
-                            height,
-                            args,
-                            startup_notify,
-                            startup_wm_class,
-                            working_directory,
-                        );
-                        match launcher {
-                            Ok(launcher) => launchers.push(launcher),
-                            Err(x) => {
-                                eprintln!("{:?}", x);
-                            }
+                        } else {
+                            x
                         }
+                    }
+                    None => {
+                        eprintln!("Icon {:?} not found", &desktop_entry.icon);
+                        Path::new("printer.png").to_path_buf()
+                    }
+                };
+                //println!("ICON PATH {:?}", icon_path);
+                let launcher = create_launcher(
+                    &atoms,
+                    &conn,
+                    &screen,
+                    gc_id,
+                    root,
+                    &icon_path,
+                    width,
+                    height,
+                    args,
+                    startup_notify,
+                    startup_wm_class,
+                    working_directory,
+                );
+                match launcher {
+                    Ok(launcher) => launchers.push(launcher),
+                    Err(x) => {
+                        eprintln!("{:?}", x);
                     }
                 }
             }
