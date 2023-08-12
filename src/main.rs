@@ -88,7 +88,46 @@ fn load_scale_image(
     ))
 }
 
+/// Check that the given visual is "as expected" (pixel values are 0xRRGGBB with RR/GG/BB being the
+/// colors). Otherwise, this exits the process.
+fn check_visual(screen: &Screen, id: Visualid) -> x11rb::image::PixelLayout {
+    // Find the information about the visual and at the same time check its depth.
+    let visual_info = screen
+        .allowed_depths
+        .iter()
+        .filter_map(|depth| {
+            let info = depth.visuals.iter().find(|depth| depth.visual_id == id);
+            info.map(|info| (depth.depth, info))
+        })
+        .next();
+    let (depth, visual_type) = match visual_info {
+        Some(info) => info,
+        None => {
+            eprintln!("Did not find the root visual's description?!");
+            std::process::exit(1);
+        }
+    };
+    // Check that the pixels have red/green/blue components that we can set directly.
+    match visual_type.class {
+        VisualClass::TRUE_COLOR | VisualClass::DIRECT_COLOR => {}
+        _ => {
+            eprintln!(
+                "The root visual is not true / direct color, but {:?}",
+                visual_type,
+            );
+            std::process::exit(1);
+        }
+    }
+    let result = x11rb::image::PixelLayout::from_visual_type(*visual_type)
+        .expect("The server sent a malformed visual type");
+    assert_eq!(result.depth(), depth);
+    result
+}
+
 fn new_x_image(
+    conn: &RustConnection,
+    screen: &Screen,
+    screen_pixel_layout: x11rb::image::PixelLayout,
     image_width: u16,
     image_height: u16,
     image_data: &[u8],
@@ -106,6 +145,14 @@ fn new_x_image(
         Cow::Owned(image_data.to_vec()),
     )?;
 
+    // Convert the image from RGBx into the server's native format.
+    let data_layout = x11rb::image::PixelLayout::new(
+        x11rb::image::ColorComponent::new(8, 24)?,
+        x11rb::image::ColorComponent::new(8, 16)?,
+        x11rb::image::ColorComponent::new(8, 8)?,
+    );
+    let image = image.reencode(data_layout, screen_pixel_layout, conn.setup())?;
+
     /*
     pub fn convert(
         &self,
@@ -116,7 +163,7 @@ fn new_x_image(
     */
 
     // TODO: scale or something. Maybe right after loading it from the file, tho?
-    Ok(image)
+    Ok(image.into_owned())
 }
 
 fn create_window(
@@ -300,6 +347,7 @@ fn create_launcher(
     atoms: &AtomCollection,
     conn: &RustConnection,
     screen: &Screen,
+    screen_pixel_layout: x11rb::image::PixelLayout,
     gc_id: u32,
     root: u32,
     icon_name: &Path,
@@ -314,24 +362,11 @@ fn create_launcher(
         let image_width = u16::try_from(local_image.width())?;
         let image_height = u16::try_from(local_image.height())?;
         let mut image_data = local_image.into_rgba8();
-        for (x, y, pixel) in image_data.enumerate_pixels_mut() {
-            let image::Rgba(data) = *pixel;
-            // apparently, x11rb wants [b, g, r, a] and we have [r, g, b, a].
-            if data[3] == 0 {
-                *pixel = image::Rgba([0xa0, 0xa0, 0xa0, 255]); // very good
-            } else {
-                *pixel = image::Rgba([data[2], data[1], data[0], data[3]]); // very good
-            }
-            // *pixel = image::Rgba([0, 0, 100, 255]);  // very good
-            // ^b  ^g ^r  ^ignored
-            // *pixel = image::Rgba([data[1], data[2], data[3], data[0]]);
-        }
-
-        new_x_image(image_width, image_height, &image_data)?
+        new_x_image(conn, screen, screen_pixel_layout, image_width, image_height, &image_data)?
     } else {
         if let Ok(image) = render_scale_image(icon_name, width.into(), height.into()) {
             let image_data = image.as_ref().data();
-            new_x_image(width, height, &image_data)?
+            new_x_image(conn, screen, screen_pixel_layout, width, height, &image_data)?
         } else {
             eprintln!("WTF");
             let mut image_data = Vec::<u8>::new();
@@ -340,7 +375,7 @@ fn create_launcher(
             for i in (0..size) {
                 image_data.push(0);
             }
-            new_x_image(width, height, &image_data)?
+            new_x_image(conn, screen, screen_pixel_layout, width, height, &image_data)?
         }
     };
     // TODO: image::imageops: blur, brighten, invert
@@ -351,7 +386,7 @@ fn create_launcher(
     conn.create_pixmap(depth, pixmap_id, root, width, height)
         .unwrap(); // TODO: automatically recreate when depth changes (or size changes--which it shouldn't).
 
-    image.put(conn, pixmap_id, gc_id, 0, 0).unwrap(); // FIXME: if shm, use shm!
+    image.native(conn.setup()).unwrap().put(conn, pixmap_id, gc_id, 0, 0).unwrap(); // FIXME: if shm, use shm!
 
     let (mainwin_id, iconwin_id) = create_window(atoms, conn, screen, width, height)?;
     let change = ChangeWindowAttributesAux::default()
@@ -415,6 +450,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (conn, screen_num) = x11rb::connect(None).unwrap();
     let atoms = AtomCollection::new(&conn)?.reply()?;
     let screen = &conn.setup().roots[screen_num];
+    let screen_pixel_layout = check_visual(screen, screen.root_visual);
     let width: u16 = 64;
     let height: u16 = 64;
     let root = screen.root;
@@ -521,14 +557,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let icon = match desktop_entry.icon {
             None => None,
             Some(ref icon_name) => {
+                /*if !icon_name.contains(&"julia") {
+                    continue
+                }*/
                 //println!("icon_name {}", icon_name);
                 let mut result = xdgkit::icon_finder::find_icon(icon_name.to_string(), 64, 1);
-                /*if result.is_none() {
+                if result.is_none() {
                     result = xdgkit::icon_finder::find_icon(icon_name.to_string() + "-symbolic", 64, 1);
                     if result.is_some() {
-                        eprintln!("-symbolic");
+                        //eprintln!("-symbolic");
                     }
-                }*/
+                }
+                if result.is_none() {
+                    let f = icon_name; // absolute path maybe; drracket and vscode do that
+                    if Path::new(f).is_file() {
+                        result = Some(f.into());
+                    }
+                }
+                //println!("icon is {:?}", result);
                 result
             }
         };
@@ -592,6 +638,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &atoms,
                     &conn,
                     &screen,
+                    screen_pixel_layout,
                     gc_id,
                     root,
                     &icon_path,
@@ -665,7 +712,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     exec::Error::Errno(e) => std::io::Error::from(e),
                                 })
                             })
-                            .spawn();
+                            .spawn(); // TODO: reap children
                     }
                 }
             }
